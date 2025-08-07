@@ -5,6 +5,5 @@
   "minAppVersion": "1.0.0",
   "description": "Manage callouts in the document",
   "author": "mathmaid",
-  "isDesktopOnly": false,
-  "license": "MIT"
+  "isDesktopOnly": false
 }
