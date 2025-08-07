@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "Tasks.md",
+                "file": "README.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "Tasks"
+              "title": "README"
             }
           }
         ]
@@ -78,7 +78,7 @@
       }
     ],
     "direction": "horizontal",
-    "width": 268.5
+    "width": 554.5
   },
   "right": {
     "id": "8654dbb810ca01ad",
@@ -166,7 +166,7 @@
       }
     ],
     "direction": "horizontal",
-    "width": 442.5
+    "width": 540.5
   },
   "left-ribbon": {
     "hiddenItems": {
@@ -179,10 +179,15 @@
       "callout-organizer:Open Callout Organizer": false
     }
   },
-  "active": "5f560c91bee03046",
+  "active": "625ae2d0003b8a6f",
   "lastOpenFiles": [
-    "README.md",
+    "src",
+    "src/Pasted image 20250807135550.png",
+    "attachments",
     "Tasks.md",
+    "Obsidian Built-in Callouts.md",
+    "README.md",
+    "Plugin Maintenance Guide.md",
     "CLAUDE.md",
     "main.js",
     "styles.css",
@@ -190,8 +195,6 @@
     "manifest.json",
     "LICENSE",
     "README.md.md",
-    "Obsidian Built-in Callouts.md",
-    "Plugin Maintenance Guide.md",
     "Folder",
     "Folder",
     "callout-organizer.md"

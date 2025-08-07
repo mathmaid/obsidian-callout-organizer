@@ -53,6 +53,8 @@ var DEFAULT_SETTINGS = {
   // Drag options
   useEmbedLinks: true,
   // Use embed links by default
+  invisibleEmbeddings: true,
+  // Enable invisible embeddings by default
   // Callout options
   customCalloutCSS: "",
   // Callout colors will be dynamically populated based on detected callouts in vault
@@ -1129,6 +1131,14 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
     ${this.settings.customCalloutCSS}
 }`;
     }
+    if (this.settings.invisibleEmbeddings) {
+      css += `
+/* Invisible Embeddings */
+.markdown-embed {
+    padding: 0;
+    border: 0;
+}`;
+    }
     this.styleElement.textContent = css;
     document.head.appendChild(this.styleElement);
   }
@@ -1388,6 +1398,11 @@ var CalloutOrganizerSettingTab = class extends import_obsidian.PluginSettingTab 
       this.plugin.settings.useEmbedLinks = value;
       await this.plugin.saveSettings();
     }));
+    new import_obsidian.Setting(dragContainer).setName("Invisible Embeddings").setDesc("Make embedded callouts appear seamlessly without padding or borders").addToggle((toggle) => toggle.setValue(this.plugin.settings.invisibleEmbeddings).onChange(async (value) => {
+      this.plugin.settings.invisibleEmbeddings = value;
+      await this.plugin.saveSettings();
+      this.plugin.injectCustomCalloutCSS();
+    }));
     containerEl.createEl("h3", { text: "Search Options" });
     const searchContainer = containerEl.createEl("div", { cls: "callout-settings-indent" });
     new import_obsidian.Setting(searchContainer).setName("Excluded Folders").setDesc("Exclude these folders from search (comma-separated)").addTextArea((text) => text.setPlaceholder("folder1, folder2/subfolder").setValue(this.plugin.settings.excludedFolders.join(", ")).onChange(async (value) => {
@@ -1447,6 +1462,16 @@ var CalloutOrganizerSettingTab = class extends import_obsidian.PluginSettingTab 
       text: "\u{1F4A1} Note: Some CSS changes may require restarting Obsidian to take full effect.",
       cls: "setting-item-description"
     });
+    calloutOptionsContainer.createEl("h4", { text: "Custom CSS" });
+    new import_obsidian.Setting(calloutOptionsContainer).setName("Custom Callout CSS").setDesc("Add custom CSS properties for all callouts. See recommended CSS snippets at: https://github.com/mathmaid/obsidian-callout-organizer").addTextArea((text) => {
+      text.setPlaceholder("/* custom css snippets */");
+      text.setValue(this.plugin.settings.customCalloutCSS);
+      text.onChange(async (value) => {
+        this.plugin.settings.customCalloutCSS = value;
+        await this.plugin.saveSettings();
+        this.plugin.injectCustomCalloutCSS();
+      });
+    });
     calloutOptionsContainer.createEl("h4", { text: "Callout Colors" });
     const colorsContainer = calloutOptionsContainer.createEl("div");
     colorsContainer.createEl("p", {
@@ -1496,7 +1521,7 @@ var CalloutOrganizerSettingTab = class extends import_obsidian.PluginSettingTab 
       const builtinTypes = sortedTypes.filter((type) => this.plugin.isBuiltinCalloutType(type));
       const userTypes = sortedTypes.filter((type) => !this.plugin.isBuiltinCalloutType(type));
       if (builtinTypes.length > 0) {
-        container.createEl("h4", { text: "Built-in Obsidian Callouts" });
+        container.createEl("h5", { text: "Built-in Obsidian Callouts" });
         container.createEl("p", {
           text: `${builtinTypes.length} built-in callout types. Reset button restores Obsidian defaults.`,
           cls: "setting-item-description"
@@ -1507,7 +1532,7 @@ var CalloutOrganizerSettingTab = class extends import_obsidian.PluginSettingTab 
         }
       }
       if (userTypes.length > 0) {
-        container.createEl("h4", { text: "Custom Callouts" });
+        container.createEl("h5", { text: "Custom Callouts" });
         container.createEl("p", {
           text: `${userTypes.length} custom callout types. Reset button sets to note callout defaults.`,
           cls: "setting-item-description"
@@ -1517,16 +1542,6 @@ var CalloutOrganizerSettingTab = class extends import_obsidian.PluginSettingTab 
           this.createCalloutSetting(container, type, colors, false);
         }
       }
-      container.createEl("h4", { text: "Custom CSS" });
-      new import_obsidian.Setting(container).setName("Custom Callout CSS").setDesc("Add custom CSS properties for all callouts").addTextArea((text) => {
-        text.setPlaceholder("/* custom css snippets */");
-        text.setValue(this.plugin.settings.customCalloutCSS);
-        text.onChange(async (value) => {
-          this.plugin.settings.customCalloutCSS = value;
-          await this.plugin.saveSettings();
-          this.plugin.injectCustomCalloutCSS();
-        });
-      });
     } catch (error) {
       loadingEl.textContent = "Error scanning vault for callouts.";
       console.error("Error scanning for callouts:", error);

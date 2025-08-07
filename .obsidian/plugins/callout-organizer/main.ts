@@ -30,6 +30,7 @@ interface CalloutOrganizerSettings {
     breadcrumbFontSize: number;
     // Drag options
     useEmbedLinks: boolean;
+    invisibleEmbeddings: boolean;
     // Callout options
     customCalloutCSS: string;
     // Callout color customization
@@ -58,6 +59,7 @@ const DEFAULT_SETTINGS: CalloutOrganizerSettings = {
     breadcrumbFontSize: 12,
     // Drag options
     useEmbedLinks: true, // Use embed links by default
+    invisibleEmbeddings: true, // Enable invisible embeddings by default
     // Callout options
     customCalloutCSS: '',
     // Callout colors will be dynamically populated based on detected callouts in vault
@@ -1432,6 +1434,16 @@ export default class CalloutOrganizerPlugin extends Plugin {
 }`;
         }
         
+        // Add invisible embeddings CSS if enabled
+        if (this.settings.invisibleEmbeddings) {
+            css += `
+/* Invisible Embeddings */
+.markdown-embed {
+    padding: 0;
+    border: 0;
+}`;
+        }
+        
         this.styleElement.textContent = css;
         document.head.appendChild(this.styleElement);
     }
@@ -1833,6 +1845,17 @@ class CalloutOrganizerSettingTab extends PluginSettingTab {
                     await this.plugin.saveSettings();
                 }));
 
+        new Setting(dragContainer)
+            .setName('Invisible Embeddings')
+            .setDesc('Make embedded callouts appear seamlessly without padding or borders')
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.invisibleEmbeddings)
+                .onChange(async (value) => {
+                    this.plugin.settings.invisibleEmbeddings = value;
+                    await this.plugin.saveSettings();
+                    this.plugin.injectCustomCalloutCSS();
+                }));
+
         containerEl.createEl('h3', {text: 'Search Options'});
 
         // Create indented container for search sub-options  
@@ -1952,6 +1975,22 @@ class CalloutOrganizerSettingTab extends PluginSettingTab {
             cls: 'setting-item-description'
         });
         
+        // Custom CSS Section - moved to top
+        calloutOptionsContainer.createEl('h4', {text: 'Custom CSS'});
+        
+        new Setting(calloutOptionsContainer)
+            .setName('Custom Callout CSS')
+            .setDesc('Add custom CSS properties for all callouts. See recommended CSS snippets at: https://github.com/mathmaid/obsidian-callout-organizer')
+            .addTextArea(text => {
+                text.setPlaceholder('/* custom css snippets */');
+                text.setValue(this.plugin.settings.customCalloutCSS);
+                text.onChange(async (value) => {
+                    this.plugin.settings.customCalloutCSS = value;
+                    await this.plugin.saveSettings();
+                    this.plugin.injectCustomCalloutCSS();
+                });
+            });
+        
         // Callout Colors Section
         calloutOptionsContainer.createEl('h4', {text: 'Callout Colors'});
         // Callout Colors Section (keeping existing structure)
@@ -2031,7 +2070,7 @@ class CalloutOrganizerSettingTab extends PluginSettingTab {
             
             // Display built-in callouts section
             if (builtinTypes.length > 0) {
-                container.createEl('h4', {text: 'Built-in Obsidian Callouts'});
+                container.createEl('h5', {text: 'Built-in Obsidian Callouts'});
                 container.createEl('p', {
                     text: `${builtinTypes.length} built-in callout types. Reset button restores Obsidian defaults.`,
                     cls: 'setting-item-description'
@@ -2045,7 +2084,7 @@ class CalloutOrganizerSettingTab extends PluginSettingTab {
             
             // Display user callouts section
             if (userTypes.length > 0) {
-                container.createEl('h4', {text: 'Custom Callouts'});
+                container.createEl('h5', {text: 'Custom Callouts'});
                 container.createEl('p', {
                     text: `${userTypes.length} custom callout types. Reset button sets to note callout defaults.`,
                     cls: 'setting-item-description'
@@ -2057,22 +2096,6 @@ class CalloutOrganizerSettingTab extends PluginSettingTab {
                 }
             }
             
-            // Add Custom CSS section after colors
-            container.createEl('h4', {text: 'Custom CSS'});
-            
-            new Setting(container)
-                .setName('Custom Callout CSS')
-                .setDesc('Add custom CSS properties for all callouts')
-                .addTextArea(text => {
-                    text.setPlaceholder('/* custom css snippets */');
-                    text.setValue(this.plugin.settings.customCalloutCSS);
-                    text.onChange(async (value) => {
-                        this.plugin.settings.customCalloutCSS = value;
-                        await this.plugin.saveSettings();
-                        this.plugin.injectCustomCalloutCSS();
-                    });
-                    // Remove custom dimensions to use default CSS styling
-                });
                 
         } catch (error) {
             loadingEl.textContent = 'Error scanning vault for callouts.';

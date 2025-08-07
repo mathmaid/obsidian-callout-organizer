@@ -18,6 +18,7 @@
   "calloutFontSize": 14,
   "breadcrumbFontSize": 12,
   "useEmbedLinks": true,
+  "invisibleEmbeddings": true,
   "customCalloutCSS": "",
   "calloutColors": {
     "abstract": {

@@ -12,6 +12,7 @@ abstract: lucide-clipboard-list, #00BFBC
 
 > [!summary] Title
 > Contents
+> ^summary-uc8im1
 
 summary: lucide-clipboard-list, #00BFBC 
 
@@ -22,11 +23,13 @@ tldr: lucide-clipboard-list, #00BFBC
 
 > [!info] Title
 > Contents
+> ^info-luihej
 
 info: lucide-info, #086DDD
 
 > [!todo] Title
 > Contents
+> ^todo-h3dzun
 
 todo: lucide-check-circle-2, #086DDD
 

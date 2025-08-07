@@ -2,6 +2,8 @@
 
 A powerful plugin for organizing and navigating callouts across your Obsidian vault.
 
+![[Pasted image 20250807135550.png]]
+
 ## Features
 
 ### 🎯 Smart Callout Organization
