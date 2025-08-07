@@ -37,6 +37,15 @@
     height: 16px;
 }
 
+/* Responsive icon sizing for callout content */
+.callout-organizer-item .callout-title svg,
+.callout-type-icon svg,
+.callout-title-icon svg {
+    width: calc(var(--callout-font-size, 14px) * 18 / 14);
+    height: calc(var(--callout-font-size, 14px) * 18 / 14);
+    flex-shrink: 0;
+}
+
 .callout-container {
     margin-top: 16px;
 }
@@ -77,8 +86,12 @@
 
 .callout-organizer-title {
     font-size: 1em;
-    color: var(--callout-title-color);
+    color: var(--callout-title-color, var(--text-normal));
     font-family: var(--font-text);
+}
+
+.callout-organizer-item .callout-title {
+    color: var(--callout-title-color, var(--text-normal));
 }
 
 .callout-organizer-title p {

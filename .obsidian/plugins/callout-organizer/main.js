@@ -30,7 +30,6 @@ module.exports = __toCommonJS(main_exports);
 var import_obsidian = require("obsidian");
 var DEFAULT_SETTINGS = {
   excludedFolders: [],
-  folderFilterMode: "exclude",
   groupByType: false,
   // Show in file order by default
   searchInFilenames: true,
@@ -317,8 +316,8 @@ var CalloutOrganizerView = class extends import_obsidian.ItemView {
         const iconEl = button.createEl("span", { cls: "callout-type-icon" });
         (0, import_obsidian.setIcon)(iconEl, iconName);
         iconEl.style.marginRight = "4px";
-        iconEl.style.width = "14px";
-        iconEl.style.height = "14px";
+        iconEl.style.width = "calc(var(--callout-font-size, 14px) * 18 / 14)";
+        iconEl.style.height = "calc(var(--callout-font-size, 14px) * 18 / 14)";
         iconEl.style.display = "inline-flex";
         iconEl.style.alignItems = "center";
       }
@@ -550,8 +549,8 @@ var CalloutOrganizerView = class extends import_obsidian.ItemView {
           const iconEl = titleEl.createEl("span", { cls: "callout-title-icon" });
           (0, import_obsidian.setIcon)(iconEl, iconName);
           iconEl.style.marginRight = "6px";
-          iconEl.style.width = "16px";
-          iconEl.style.height = "16px";
+          iconEl.style.width = "calc(var(--callout-font-size, 14px) * 18 / 14)";
+          iconEl.style.height = "calc(var(--callout-font-size, 14px) * 18 / 14)";
           iconEl.style.display = "inline-flex";
           iconEl.style.alignItems = "center";
           iconEl.style.color = ((_c = this.plugin.settings.calloutColors[callout.type]) == null ? void 0 : _c.color) || "var(--callout-title-color)";
@@ -699,7 +698,7 @@ var CalloutOrganizerView = class extends import_obsidian.ItemView {
           const editor = view.editor;
           if (editor) {
             editor.setCursor(lineNumber - 1, 0);
-            editor.scrollIntoView({ from: { line: lineNumber - 1, ch: 0 }, to: { line: lineNumber - 1, ch: 0 } });
+            editor.scrollIntoView({ from: { line: lineNumber - 1, ch: 0 }, to: { line: lineNumber - 1, ch: 0 } }, true);
             setTimeout(() => {
               this.highlightLine(editor, lineNumber - 1);
             }, 100);
@@ -1051,6 +1050,7 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
     css += `
 .callout-organizer-item {
     font-size: ${this.settings.calloutFontSize}px;
+    --callout-font-size: ${this.settings.calloutFontSize}px;
 }
 
 .callout-organizer-breadcrumb {
@@ -1169,15 +1169,9 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
     const folders = this.settings.excludedFolders;
     if (folders.length === 0)
       return false;
-    if (this.settings.folderFilterMode === "exclude") {
-      return folders.some(
-        (folder) => filePath.startsWith(folder + "/") || filePath === folder
-      );
-    } else {
-      return !folders.some(
-        (folder) => filePath.startsWith(folder + "/") || filePath === folder
-      );
-    }
+    return folders.some(
+      (folder) => filePath.startsWith(folder + "/") || filePath === folder
+    );
   }
   async extractCalloutsFromFile(file) {
     const content = await this.app.vault.read(file);
@@ -1384,17 +1378,7 @@ var CalloutOrganizerSettingTab = class extends import_obsidian.PluginSettingTab 
     }));
     containerEl.createEl("h3", { text: "Search Options" });
     const searchContainer = containerEl.createEl("div", { cls: "callout-settings-indent" });
-    new import_obsidian.Setting(searchContainer).setName("Folder Filtering Mode").setDesc("Choose whether to include or exclude specific folders from search").addDropdown((dropdown) => {
-      dropdown.addOption("exclude", "Exclude Folders");
-      dropdown.addOption("include", "Included Folders");
-      dropdown.setValue(this.plugin.settings.folderFilterMode);
-      dropdown.onChange(async (value) => {
-        this.plugin.settings.folderFilterMode = value;
-        await this.plugin.saveSettings();
-        this.display();
-      });
-    });
-    new import_obsidian.Setting(searchContainer).setName(this.plugin.settings.folderFilterMode === "include" ? "Included Folders" : "Excluded Folders").setDesc(this.plugin.settings.folderFilterMode === "include" ? "Only search in these folders (comma-separated)" : "Exclude these folders from search (comma-separated)").addTextArea((text) => text.setPlaceholder("folder1, folder2/subfolder").setValue(this.plugin.settings.excludedFolders.join(", ")).onChange(async (value) => {
+    new import_obsidian.Setting(searchContainer).setName("Excluded Folders").setDesc("Exclude these folders from search (comma-separated)").addTextArea((text) => text.setPlaceholder("folder1, folder2/subfolder").setValue(this.plugin.settings.excludedFolders.join(", ")).onChange(async (value) => {
       this.plugin.settings.excludedFolders = value.split(",").map((s) => s.trim()).filter((s) => s);
       await this.plugin.saveSettings();
     }));
@@ -1447,6 +1431,10 @@ var CalloutOrganizerSettingTab = class extends import_obsidian.PluginSettingTab 
     }));
     containerEl.createEl("h3", { text: "Callout Options" });
     const calloutOptionsContainer = containerEl.createEl("div", { cls: "callout-settings-indent" });
+    calloutOptionsContainer.createEl("p", {
+      text: "\u{1F4A1} Note: Some CSS changes may require restarting Obsidian to take full effect.",
+      cls: "setting-item-description"
+    });
     calloutOptionsContainer.createEl("h4", { text: "Callout Colors" });
     const colorsContainer = calloutOptionsContainer.createEl("div");
     colorsContainer.createEl("p", {

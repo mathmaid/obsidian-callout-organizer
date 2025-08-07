@@ -7,7 +7,6 @@ interface CalloutColors {
 
 interface CalloutOrganizerSettings {
     excludedFolders: string[];
-    folderFilterMode: 'exclude' | 'include';
     groupByType: boolean;
     searchInFilenames: boolean;
     searchInHeaders: boolean;
@@ -36,7 +35,6 @@ interface CalloutOrganizerSettings {
 
 const DEFAULT_SETTINGS: CalloutOrganizerSettings = {
     excludedFolders: [],
-    folderFilterMode: 'exclude',
     groupByType: false, // Show in file order by default
     searchInFilenames: true,
     searchInHeaders: true,
@@ -424,8 +422,8 @@ class CalloutOrganizerView extends ItemView {
                 const iconEl = button.createEl("span", { cls: "callout-type-icon" });
                 setIcon(iconEl, iconName);
                 iconEl.style.marginRight = "4px";
-                iconEl.style.width = "14px";
-                iconEl.style.height = "14px";
+                iconEl.style.width = "calc(var(--callout-font-size, 14px) * 18 / 14)";
+                iconEl.style.height = "calc(var(--callout-font-size, 14px) * 18 / 14)";
                 iconEl.style.display = "inline-flex";
                 iconEl.style.alignItems = "center";
             }
@@ -734,8 +732,8 @@ class CalloutOrganizerView extends ItemView {
                     const iconEl = titleEl.createEl("span", { cls: "callout-title-icon" });
                     setIcon(iconEl, iconName);
                     iconEl.style.marginRight = "6px";
-                    iconEl.style.width = "16px";
-                    iconEl.style.height = "16px";
+                    iconEl.style.width = "calc(var(--callout-font-size, 14px) * 18 / 14)";
+                    iconEl.style.height = "calc(var(--callout-font-size, 14px) * 18 / 14)";
                     iconEl.style.display = "inline-flex";
                     iconEl.style.alignItems = "center";
                     iconEl.style.color = this.plugin.settings.calloutColors[callout.type]?.color || 'var(--callout-title-color)';
@@ -951,7 +949,7 @@ class CalloutOrganizerView extends ItemView {
                     const editor = (view as any).editor;
                     if (editor) {
                         editor.setCursor(lineNumber - 1, 0);
-                        editor.scrollIntoView({ from: { line: lineNumber - 1, ch: 0 }, to: { line: lineNumber - 1, ch: 0 } });
+                        editor.scrollIntoView({ from: { line: lineNumber - 1, ch: 0 }, to: { line: lineNumber - 1, ch: 0 } }, true);
                         
                         // Add highlight animation
                         setTimeout(() => {
@@ -1329,6 +1327,7 @@ export default class CalloutOrganizerPlugin extends Plugin {
         css += `
 .callout-organizer-item {
     font-size: ${this.settings.calloutFontSize}px;
+    --callout-font-size: ${this.settings.calloutFontSize}px;
 }
 
 .callout-organizer-breadcrumb {
@@ -1476,16 +1475,9 @@ export default class CalloutOrganizerPlugin extends Plugin {
         const folders = this.settings.excludedFolders;
         if (folders.length === 0) return false;
         
-        if (this.settings.folderFilterMode === 'exclude') {
-            return folders.some(folder => 
-                filePath.startsWith(folder + '/') || filePath === folder
-            );
-        } else {
-            // Include mode - only include files in specified folders
-            return !folders.some(folder => 
-                filePath.startsWith(folder + '/') || filePath === folder
-            );
-        }
+        return folders.some(folder => 
+            filePath.startsWith(folder + '/') || filePath === folder
+        );
     }
 
     async extractCalloutsFromFile(file: TFile): Promise<CalloutItem[]> {
@@ -1820,25 +1812,9 @@ class CalloutOrganizerSettingTab extends PluginSettingTab {
         // Create indented container for search sub-options  
         const searchContainer = containerEl.createEl('div', {cls: 'callout-settings-indent'});
 
-        // Move folder filtering to the top
         new Setting(searchContainer)
-            .setName('Folder Filtering Mode')
-            .setDesc('Choose whether to include or exclude specific folders from search')
-            .addDropdown(dropdown => {
-                dropdown.addOption('exclude', 'Exclude Folders');
-                dropdown.addOption('include', 'Included Folders');
-                dropdown.setValue(this.plugin.settings.folderFilterMode);
-                dropdown.onChange(async (value) => {
-                    this.plugin.settings.folderFilterMode = value as 'exclude' | 'include';
-                    await this.plugin.saveSettings();
-                    // Refresh the settings display to update the folder list name
-                    this.display();
-                });
-            });
-
-        new Setting(searchContainer)
-            .setName(this.plugin.settings.folderFilterMode === 'include' ? 'Included Folders' : 'Excluded Folders')
-            .setDesc(this.plugin.settings.folderFilterMode === 'include' ? 'Only search in these folders (comma-separated)' : 'Exclude these folders from search (comma-separated)')
+            .setName('Excluded Folders')
+            .setDesc('Exclude these folders from search (comma-separated)')
             .addTextArea(text => text
                 .setPlaceholder('folder1, folder2/subfolder')
                 .setValue(this.plugin.settings.excludedFolders.join(', '))
@@ -1943,6 +1919,12 @@ class CalloutOrganizerSettingTab extends PluginSettingTab {
         containerEl.createEl('h3', {text: 'Callout Options'});
         
         const calloutOptionsContainer = containerEl.createEl('div', {cls: 'callout-settings-indent'});
+        
+        // Add tip about restarting Obsidian
+        calloutOptionsContainer.createEl('p', {
+            text: '💡 Note: Some CSS changes may require restarting Obsidian to take full effect.',
+            cls: 'setting-item-description'
+        });
         
         // Callout Colors Section
         calloutOptionsContainer.createEl('h4', {text: 'Callout Colors'});

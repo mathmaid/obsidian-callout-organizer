@@ -4,21 +4,21 @@
     "type": "split",
     "children": [
       {
-        "id": "64e3b1d109793cf6",
+        "id": "c826b9a8bca1914d",
         "type": "tabs",
         "children": [
           {
-            "id": "5cc7ec8dd84c941d",
+            "id": "5f560c91bee03046",
             "type": "leaf",
             "state": {
               "type": "markdown",
               "state": {
-                "file": "Tasks.md",
+                "file": "CLAUDE.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "Tasks"
+              "title": "CLAUDE"
             }
           }
         ]
@@ -94,7 +94,7 @@
             "state": {
               "type": "backlink",
               "state": {
-                "file": "Tasks.md",
+                "file": "CLAUDE.md",
                 "collapseAll": false,
                 "extraContext": false,
                 "sortOrder": "alphabetical",
@@ -104,7 +104,7 @@
                 "unlinkedCollapsed": true
               },
               "icon": "links-coming-in",
-              "title": "Tasks 的反向链接列表"
+              "title": "CLAUDE 的反向链接列表"
             }
           },
           {
@@ -179,10 +179,13 @@
       "callout-organizer:Open Callout Organizer": false
     }
   },
-  "active": "738c34307f839749",
+  "active": "5f560c91bee03046",
   "lastOpenFiles": [
-    "callout-organizer.md",
+    "Plugin Maintenance Guide.md",
     "Tasks.md",
+    "CLAUDE.md",
+    "Folder",
+    "callout-organizer.md",
     "Obsidian Built-in Callouts.md"
   ]
 }
