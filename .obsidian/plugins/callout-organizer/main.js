@@ -1794,7 +1794,6 @@ var CalloutOrganizerSettingTab = class extends import_obsidian.PluginSettingTab 
         if (view) {
           await view.refreshCallouts();
         }
-        this.display();
       });
     });
   }

@@ -2225,9 +2225,6 @@ class CalloutOrganizerSettingTab extends PluginSettingTab {
                             if (view) {
                                 await view.refreshCallouts();
                             }
-                            
-                            // Also refresh the entire settings display as backup
-                            this.display();
                         });
                     });
     }

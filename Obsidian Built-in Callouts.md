@@ -1,6 +1,7 @@
 
 > [!note] Title
 > Contents
+> ^note-45kv07
 
 note: lucide-pencil, #086DDD
 
