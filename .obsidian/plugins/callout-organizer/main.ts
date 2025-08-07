@@ -656,7 +656,55 @@ class CalloutOrganizerView extends ItemView {
             calloutEl.style.opacity = '1';
         };
         
-        // Build hierarchical breadcrumb
+        // Store breadcrumb creation for later (moved to bottom)
+        
+        const header = calloutEl.createEl("div", { cls: "callout-organizer-header" });
+        
+        // Use callout title if available, otherwise use callout type
+        const displayTitle = callout.title || callout.type.charAt(0).toUpperCase() + callout.type.slice(1);
+        
+        if (displayTitle) {
+            const titleEl = header.createEl("span", { 
+                cls: "callout-organizer-title"
+            });
+            
+            // Get callout color for styling
+            const calloutColor = this.plugin.settings.calloutColors[callout.type]?.color || 'var(--callout-title-color)';
+            
+            // Always add icon (for both custom titles and type titles)
+            const iconName = this.plugin.settings.calloutColors[callout.type]?.icon;
+            if (iconName && iconName !== 'none') {
+                const iconEl = titleEl.createEl("span", { cls: "callout-title-icon" });
+                setIcon(iconEl, iconName);
+                iconEl.style.marginRight = "6px";
+                iconEl.style.width = "calc(var(--callout-font-size, 14px) * 18 / 14)";
+                iconEl.style.height = "calc(var(--callout-font-size, 14px) * 18 / 14)";
+                iconEl.style.display = "inline-flex";
+                iconEl.style.alignItems = "center";
+                iconEl.style.color = calloutColor;
+            }
+            
+            // Apply callout color to title text
+            titleEl.style.color = calloutColor;
+            
+            // Render title with math support
+            MarkdownRenderer.render(this.app, displayTitle, titleEl, callout.file, this.component).then(() => {
+                // Process math in title after MarkdownRenderer has completed
+                this.processMathForElement(titleEl);
+                // Reapply color after markdown rendering
+                titleEl.style.color = calloutColor;
+            });
+        }
+        
+        const content = calloutEl.createEl("div", { cls: "callout-organizer-content" });
+        
+        // Render full markdown content with math support
+        MarkdownRenderer.render(this.app, callout.content, content, callout.file, this.component).then(() => {
+            // Process math after MarkdownRenderer has completed
+            this.processMathForElement(content);
+        });
+        
+        // Build hierarchical breadcrumb (moved to bottom)
         const breadcrumb = calloutEl.createEl("div", { cls: "callout-organizer-breadcrumb" });
         
         // Add filename if enabled in settings
@@ -714,46 +762,6 @@ class CalloutOrganizerView extends ItemView {
                 this.openFile(callout.file, callout.lineNumber, e.ctrlKey || e.metaKey);
             };
         }
-        
-        const header = calloutEl.createEl("div", { cls: "callout-organizer-header" });
-        
-        // Use callout title if available, otherwise use callout type
-        const displayTitle = callout.title || callout.type.charAt(0).toUpperCase() + callout.type.slice(1);
-        
-        if (displayTitle) {
-            const titleEl = header.createEl("span", { 
-                cls: "callout-organizer-title"
-            });
-            
-            // Add icon if no custom title (showing type as title)
-            if (!callout.title) {
-                const iconName = this.plugin.settings.calloutColors[callout.type]?.icon;
-                if (iconName && iconName !== 'none') {
-                    const iconEl = titleEl.createEl("span", { cls: "callout-title-icon" });
-                    setIcon(iconEl, iconName);
-                    iconEl.style.marginRight = "6px";
-                    iconEl.style.width = "calc(var(--callout-font-size, 14px) * 18 / 14)";
-                    iconEl.style.height = "calc(var(--callout-font-size, 14px) * 18 / 14)";
-                    iconEl.style.display = "inline-flex";
-                    iconEl.style.alignItems = "center";
-                    iconEl.style.color = this.plugin.settings.calloutColors[callout.type]?.color || 'var(--callout-title-color)';
-                }
-            }
-            
-            // Render title with math support
-            MarkdownRenderer.render(this.app, displayTitle, titleEl, callout.file, this.component).then(() => {
-                // Process math in title after MarkdownRenderer has completed
-                this.processMathForElement(titleEl);
-            });
-        }
-        
-        const content = calloutEl.createEl("div", { cls: "callout-organizer-content" });
-        
-        // Render full markdown content with math support
-        MarkdownRenderer.render(this.app, callout.content, content, callout.file, this.component).then(() => {
-            // Process math after MarkdownRenderer has completed
-            this.processMathForElement(content);
-        });
     }
 
     groupCallouts(): Record<string, CalloutItem[]> {
@@ -1347,8 +1355,15 @@ export default class CalloutOrganizerPlugin extends Plugin {
             
             if (this.isBuiltinCalloutType(type)) {
                 // For built-in callouts, only override if user has customized them
-                const hasCustomColor = colors.color !== this.getDefaultColorForCalloutType(type);
-                const hasCustomIcon = colors.icon !== this.getDefaultIconForCalloutType(type);
+                const defaultColor = this.getDefaultColorForCalloutType(type);
+                const defaultIcon = this.getDefaultIconForCalloutType(type);
+                const hasCustomColor = colors.color !== defaultColor;
+                const hasCustomIcon = colors.icon !== defaultIcon;
+                
+                // Debug logging for note callouts
+                if (type === 'note') {
+                    console.log(`Note callout debug: current icon="${colors.icon}", default icon="${defaultIcon}", hasCustomIcon=${hasCustomIcon}`);
+                }
                 
                 if (hasCustomColor || hasCustomIcon) {
                     // User has customized this built-in callout, apply globally with high specificity

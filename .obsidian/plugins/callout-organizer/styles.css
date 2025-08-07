@@ -88,10 +88,21 @@
     font-size: 1em;
     color: var(--callout-title-color, var(--text-normal));
     font-family: var(--font-text);
+    display: flex;
+    align-items: center;
 }
 
 .callout-organizer-item .callout-title {
     color: var(--callout-title-color, var(--text-normal));
+}
+
+.callout-organizer-title .callout-title-icon {
+    flex-shrink: 0;
+}
+
+.callout-organizer-title p,
+.callout-organizer-title span:not(.callout-title-icon) {
+    color: inherit !important;
 }
 
 .callout-organizer-title p {
@@ -113,7 +124,8 @@
     display: flex;
     align-items: center;
     font-size: 0.9em;
-    margin-bottom: 8px;
+    margin-top: 8px;
+    margin-bottom: 0;
     color: var(--text-faint);
     font-family: var(--font-monospace);
 }
@@ -694,9 +706,12 @@
     font-weight: 500;
     display: flex;
     align-items: center;
+    justify-content: center;
     flex-shrink: 0;
     white-space: nowrap;
     margin-right: 8px;
+    min-width: 70px;
+    width: 70px;
 }
 
 .callout-clear-all-button:hover {

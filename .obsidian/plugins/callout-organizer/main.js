@@ -487,9 +487,37 @@ var CalloutOrganizerView = class extends import_obsidian.ItemView {
     calloutEl.ondragend = () => {
       calloutEl.style.opacity = "1";
     };
+    const header = calloutEl.createEl("div", { cls: "callout-organizer-header" });
+    const displayTitle = callout.title || callout.type.charAt(0).toUpperCase() + callout.type.slice(1);
+    if (displayTitle) {
+      const titleEl = header.createEl("span", {
+        cls: "callout-organizer-title"
+      });
+      const calloutColor = ((_a = this.plugin.settings.calloutColors[callout.type]) == null ? void 0 : _a.color) || "var(--callout-title-color)";
+      const iconName = (_b = this.plugin.settings.calloutColors[callout.type]) == null ? void 0 : _b.icon;
+      if (iconName && iconName !== "none") {
+        const iconEl = titleEl.createEl("span", { cls: "callout-title-icon" });
+        (0, import_obsidian.setIcon)(iconEl, iconName);
+        iconEl.style.marginRight = "6px";
+        iconEl.style.width = "calc(var(--callout-font-size, 14px) * 18 / 14)";
+        iconEl.style.height = "calc(var(--callout-font-size, 14px) * 18 / 14)";
+        iconEl.style.display = "inline-flex";
+        iconEl.style.alignItems = "center";
+        iconEl.style.color = calloutColor;
+      }
+      titleEl.style.color = calloutColor;
+      import_obsidian.MarkdownRenderer.render(this.app, displayTitle, titleEl, callout.file, this.component).then(() => {
+        this.processMathForElement(titleEl);
+        titleEl.style.color = calloutColor;
+      });
+    }
+    const content = calloutEl.createEl("div", { cls: "callout-organizer-content" });
+    import_obsidian.MarkdownRenderer.render(this.app, callout.content, content, callout.file, this.component).then(() => {
+      this.processMathForElement(content);
+    });
     const breadcrumb = calloutEl.createEl("div", { cls: "callout-organizer-breadcrumb" });
     if (this.plugin.settings.showFilenames) {
-      const filename = ((_a = callout.file.split("/").pop()) == null ? void 0 : _a.replace(/\.md$/, "")) || callout.file;
+      const filename = ((_c = callout.file.split("/").pop()) == null ? void 0 : _c.replace(/\.md$/, "")) || callout.file;
       const fileLink = breadcrumb.createEl("a", {
         text: filename,
         href: "#",
@@ -537,33 +565,6 @@ var CalloutOrganizerView = class extends import_obsidian.ItemView {
         this.openFile(callout.file, callout.lineNumber, e.ctrlKey || e.metaKey);
       };
     }
-    const header = calloutEl.createEl("div", { cls: "callout-organizer-header" });
-    const displayTitle = callout.title || callout.type.charAt(0).toUpperCase() + callout.type.slice(1);
-    if (displayTitle) {
-      const titleEl = header.createEl("span", {
-        cls: "callout-organizer-title"
-      });
-      if (!callout.title) {
-        const iconName = (_b = this.plugin.settings.calloutColors[callout.type]) == null ? void 0 : _b.icon;
-        if (iconName && iconName !== "none") {
-          const iconEl = titleEl.createEl("span", { cls: "callout-title-icon" });
-          (0, import_obsidian.setIcon)(iconEl, iconName);
-          iconEl.style.marginRight = "6px";
-          iconEl.style.width = "calc(var(--callout-font-size, 14px) * 18 / 14)";
-          iconEl.style.height = "calc(var(--callout-font-size, 14px) * 18 / 14)";
-          iconEl.style.display = "inline-flex";
-          iconEl.style.alignItems = "center";
-          iconEl.style.color = ((_c = this.plugin.settings.calloutColors[callout.type]) == null ? void 0 : _c.color) || "var(--callout-title-color)";
-        }
-      }
-      import_obsidian.MarkdownRenderer.render(this.app, displayTitle, titleEl, callout.file, this.component).then(() => {
-        this.processMathForElement(titleEl);
-      });
-    }
-    const content = calloutEl.createEl("div", { cls: "callout-organizer-content" });
-    import_obsidian.MarkdownRenderer.render(this.app, callout.content, content, callout.file, this.component).then(() => {
-      this.processMathForElement(content);
-    });
   }
   groupCallouts() {
     return this.groupFilteredCallouts(this.callouts);
@@ -1066,8 +1067,13 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
       const rgbColor = this.hexToRgb(colors.color);
       const iconName = colors.icon || "none";
       if (this.isBuiltinCalloutType(type)) {
-        const hasCustomColor = colors.color !== this.getDefaultColorForCalloutType(type);
-        const hasCustomIcon = colors.icon !== this.getDefaultIconForCalloutType(type);
+        const defaultColor = this.getDefaultColorForCalloutType(type);
+        const defaultIcon = this.getDefaultIconForCalloutType(type);
+        const hasCustomColor = colors.color !== defaultColor;
+        const hasCustomIcon = colors.icon !== defaultIcon;
+        if (type === "note") {
+          console.log(`Note callout debug: current icon="${colors.icon}", default icon="${defaultIcon}", hasCustomIcon=${hasCustomIcon}`);
+        }
         if (hasCustomColor || hasCustomIcon) {
           css += `
 /* User customized built-in callout: ${type} */
