@@ -1482,8 +1482,22 @@ var CalloutOrganizerSettingTab = class extends import_obsidian.PluginSettingTab 
       text: "\u{1F4A1} Note: Some CSS changes may require restarting Obsidian to take full effect.",
       cls: "setting-item-description"
     });
+    const githubLinkContainer = calloutOptionsContainer.createEl("p", {
+      cls: "setting-item-description"
+    });
+    githubLinkContainer.createEl("span", {
+      text: "See recommended CSS snippets and colors at: "
+    });
+    const githubLink = githubLinkContainer.createEl("a", {
+      text: "https://github.com/mathmaid/obsidian-callout-organizer",
+      href: "https://github.com/mathmaid/obsidian-callout-organizer"
+    });
+    githubLink.addEventListener("click", (e) => {
+      e.preventDefault();
+      window.open("https://github.com/mathmaid/obsidian-callout-organizer", "_blank");
+    });
     calloutOptionsContainer.createEl("h4", { text: "Custom CSS" });
-    new import_obsidian.Setting(calloutOptionsContainer).setName("Custom Callout CSS").setDesc("Add custom CSS properties that apply to ALL callouts throughout Obsidian (editor and plugin). See recommended CSS snippets at: https://github.com/mathmaid/obsidian-callout-organizer").addTextArea((text) => {
+    new import_obsidian.Setting(calloutOptionsContainer).setName("Custom Callout CSS").setDesc("Add custom CSS properties that apply to ALL callouts throughout Obsidian (editor and plugin)").addTextArea((text) => {
       text.setPlaceholder("/* custom css snippets */");
       text.setValue(this.plugin.settings.customCalloutCSS);
       text.onChange(async (value) => {
