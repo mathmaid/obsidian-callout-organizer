@@ -1,8 +1,8 @@
 # Callout Organizer for Obsidian
 
-A powerful plugin for organizing and navigating callouts across your Obsidian vault.
+A powerful plugin for organizing, searching, navigating, and citing callouts across your Obsidian vault.
 
-![](src/Builtin.png)
+![](builtin.png)
 
 ## Features
 
@@ -12,30 +12,33 @@ A powerful plugin for organizing and navigating callouts across your Obsidian va
 - **Type Filtering**: Filter callouts by type with visual buttons
 - **Search Integration**: Find callouts by title, content, filename, headers, or block IDs
 
-![](video1.mov)
+![](src/custom.png)
 
 ### 🎨 Visual Customization
 - **Color Customization**: Customize colors and icons for any callout type
 - **Built-in Support**: Automatic detection of Obsidian's built-in callout types
 - **Custom Callouts**: Automatic detection of custom callout types
+- **CSS Support:** Add your own CSS snippets
 
+![[colors.png]]
 ### 🧭 Enhanced Navigation
 - **One-Click Navigation**: Click any callout to jump to its location
-- **Smart Centering**: Cursor centers in the editor when navigating
 - **Breadcrumb Navigation**: File > Header > Block ID hierarchy
-- **Visual Feedback**: Highlight animation when jumping to callouts
 
 ### 🚀 Drag & Drop
 - **Link Generation**: Drag callouts to create links automatically
 - **Embed Support**: Option to create embed links (`![[...]]`) or regular links
-- **Auto Block IDs**: Automatically adds block IDs when dragging callouts
+- **Auto Callout IDs**: Automatically adds callout IDs when dragging callouts
 
 ## Installation
 
-1. Download the plugin files to your vault's `.obsidian/plugins/callout-organizer/` directory
-2. Reload Obsidian or restart the app
-3. Enable the plugin in Settings > Community Plugins
-4. Access via the ribbon icon or command palette
+### Install Manually
+
+1. Create a new folder named `callout-organizer` in the directory `.obsidian/plugins`
+2. Download the plugin files `main.js`, `styles.css`, `manifest.json` and add them to the folder `.obsidian/plugins/callout-organizer`
+3. Reload Obsidian or restart the app
+4. Enable the plugin in Settings > Community Plugins
+5. Access via the ribbon icon or command palette
 
 ## Usage
 
@@ -55,6 +58,55 @@ A powerful plugin for organizing and navigating callouts across your Obsidian va
 - **Block IDs**: Block IDs are automatically generated when needed
 - **Embed Mode**: Toggle embed links in settings for `![[...]]` vs `[[...]]` format
 
+## Potential Problems
+
+### Callout Standards
+
+Callouts you created should follow the following standards:
+
+```markdown
+> [!note] Title
+> Contents
+> ^callout-id
+```
+
+But the original Obsidian block id created automatically is like:
+
+```markdown
+> [!note] Title
+> Contents
+
+^callout-id
+```
+
+The plugin will recognized the second one as a callout without ID.
+
+### Math Block Formulas in Callouts
+
+Math formulas in callouts should follow the following standards:
+
+```markdown
+> [!note] Title
+> This is an identity matrix.
+> $$\begin{pmatrix} 1 & 0 & 0 \\ 0 & 1 & 0 \\ 0 & 0 & 1 \end{pmatrix}$$
+```
+
+You should avoid using:
+
+```markdown
+> [!note] Title
+> This is an identity matrix.
+> $$
+> \begin{pmatrix}
+> 1 & 0 & 0\\
+> 0 & 1 & 0\\
+> 0 & 0 & 1
+> \end{pmatrix}
+> $$
+```
+
+In the second case, the auto callout IDs will not function properly.
+
 ## Settings
 
 ### Display Options
@@ -72,75 +124,16 @@ A powerful plugin for organizing and navigating callouts across your Obsidian va
 - **Icons**: Choose from 150+ Lucide icons
 - **Custom CSS**: Add custom styling rules
 
-## Callout Types
+Here is the recommended CSS snippet for the picture at the beginning of this document.
 
-The plugin automatically detects and supports:
-
-**Built-in Types**: note, info, todo, abstract, summary, tip, success, question, warning, failure, danger, bug, example, quote
-**Custom Types**: Any callout type you create (e.g., `[!definition]`, `[!theorem]`)
-
-## Responsive Design
-
-Icons and text scale beautifully with your chosen font sizes:
-- **Base Size**: 16px icons at 14px font size  
-- **Scaling**: Icons automatically resize when you change font sizes
-- **Square Icons**: Maintained aspect ratio at all sizes
-
-## Performance
-
-Optimized for large vaults:
-- **Smart Caching**: 5-minute cache for vault-wide searches
-- **Debounced Search**: Smooth search experience
-- **Result Limits**: Configurable limits prevent performance issues
-- **Folder Exclusion**: Skip large folders to improve performance
-
-## Compatibility
-
-- **Obsidian Version**: 1.0.0+
-- **Platform**: Desktop and mobile
-- **Themes**: Compatible with all themes
-- **Other Plugins**: Works alongside other callout-related plugins
-
-## Development
-
-### Building from Source
-```bash
-npm install
-npm run build
+```css
+--callout-border-opacity: 1;
+--callout-radius: 0;
+--callout-border-width: 0.1em;
+background-color: var(--background-primary);
+border-color: rgba(var(--callout-color), var(--callout-border-opacity));
+border-left-width: 0.3em;
 ```
-
-### File Structure
-- `main.ts` - Plugin source code
-- `styles.css` - Styling and layout
-- `manifest.json` - Plugin metadata
-
-### CSS Variables
-The plugin uses these CSS variables for theming:
-- `--callout-font-size` - Controls icon sizing
-- `--callout-color` - Callout border/accent colors
-- `--callout-title-color` - Title text color
-
-## Troubleshooting
-
-### Common Issues
-
-**Icons not showing**: Restart Obsidian after changing icon settings  
-**Slow performance**: Reduce search result limits or exclude large folders  
-**Callouts not found**: Ensure proper syntax `> [!type] Title`  
-**Wrong colors**: Check custom CSS isn't overriding plugin styles  
-
-### Debug Steps
-1. Check Obsidian developer console for errors
-2. Try disabling and re-enabling the plugin
-3. Verify callout syntax matches markdown standards
-4. Clear plugin cache using the refresh button
-
-## Support
-
-For issues, questions, or feature requests, please check:
-1. This README for common solutions
-2. Plugin settings for configuration options
-3. Obsidian community forums for general support
 
 ## License
 

@@ -159,7 +159,7 @@
               "type": "callout-organizer",
               "state": {},
               "icon": "album",
-              "title": "Callout Search"
+              "title": "Callout View"
             }
           }
         ],
@@ -167,7 +167,7 @@
       }
     ],
     "direction": "horizontal",
-    "width": 546.5
+    "width": 560.5
   },
   "left-ribbon": {
     "hiddenItems": {
@@ -182,15 +182,19 @@
   },
   "active": "09138bd8ad6c162c",
   "lastOpenFiles": [
-    "src/video1.mov",
-    "Tasks.md",
     "Custom Callouts.md",
-    "Obsidian Built-in Callouts.md",
     "Plugin Maintenance Guide.md",
+    "Obsidian Built-in Callouts.md",
+    "Tasks.md",
     "README.md",
+    "src/colors.png",
+    "src/custom.png",
+    "src",
+    "未命名.md",
+    "src/video1.mov",
     "CSS snippets example.md",
     "CLAUDE.md",
-    "src/Builtin.png",
+    "src/builtin.png",
     "src/Custom.png",
     "src/Pasted image 20250807140721.png",
     "space",
@@ -203,8 +207,6 @@
     "manifest.json",
     "LICENSE",
     "README.md.md",
-    "Folder",
-    "Folder",
     "callout-organizer.md"
   ]
 }
