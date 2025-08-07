@@ -3,7 +3,7 @@
   "name": "Callout Organizer",
   "version": "1.0.1",
   "minAppVersion": "1.0.0",
-  "description": "Organize and manage callouts with advanced navigation, search, and customization features",
+  "description": "Manage callouts in the document.",
   "author": "mathmaid",
   "isDesktopOnly": false
 }
