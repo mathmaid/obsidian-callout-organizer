@@ -28,6 +28,7 @@ __export(main_exports, {
 });
 module.exports = __toCommonJS(main_exports);
 var import_obsidian = require("obsidian");
+var OBSIDIAN_NOTE_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="svg-icon lucide-pencil"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"></path><path d="m15 5 4 4"></path></svg>`;
 var DEFAULT_SETTINGS = {
   excludedFolders: [],
   groupByType: false,
@@ -314,10 +315,14 @@ var CalloutOrganizerView = class extends import_obsidian.ItemView {
       const iconName = (_a = this.plugin.settings.calloutColors[type]) == null ? void 0 : _a.icon;
       if (iconName && iconName !== "none") {
         const iconEl = button.createEl("span", { cls: "callout-type-icon" });
-        (0, import_obsidian.setIcon)(iconEl, iconName);
+        if (type === "note" && iconName === "pencil") {
+          iconEl.innerHTML = OBSIDIAN_NOTE_ICON_SVG;
+        } else {
+          (0, import_obsidian.setIcon)(iconEl, iconName);
+        }
         iconEl.style.marginRight = "4px";
-        iconEl.style.width = "calc(var(--callout-font-size, 14px) * 18 / 14)";
-        iconEl.style.height = "calc(var(--callout-font-size, 14px) * 18 / 14)";
+        iconEl.style.width = "calc(var(--callout-font-size, 14px) * 16 / 14)";
+        iconEl.style.height = "calc(var(--callout-font-size, 14px) * 16 / 14)";
         iconEl.style.display = "inline-flex";
         iconEl.style.alignItems = "center";
       }
@@ -497,10 +502,14 @@ var CalloutOrganizerView = class extends import_obsidian.ItemView {
       const iconName = (_b = this.plugin.settings.calloutColors[callout.type]) == null ? void 0 : _b.icon;
       if (iconName && iconName !== "none") {
         const iconEl = titleEl.createEl("span", { cls: "callout-title-icon" });
-        (0, import_obsidian.setIcon)(iconEl, iconName);
+        if (callout.type === "note" && iconName === "pencil") {
+          iconEl.innerHTML = OBSIDIAN_NOTE_ICON_SVG;
+        } else {
+          (0, import_obsidian.setIcon)(iconEl, iconName);
+        }
         iconEl.style.marginRight = "6px";
-        iconEl.style.width = "calc(var(--callout-font-size, 14px) * 18 / 14)";
-        iconEl.style.height = "calc(var(--callout-font-size, 14px) * 18 / 14)";
+        iconEl.style.width = "calc(var(--callout-font-size, 14px) * 16 / 14)";
+        iconEl.style.height = "calc(var(--callout-font-size, 14px) * 16 / 14)";
         iconEl.style.display = "inline-flex";
         iconEl.style.alignItems = "center";
         iconEl.style.color = calloutColor;
@@ -1071,9 +1080,6 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
         const defaultIcon = this.getDefaultIconForCalloutType(type);
         const hasCustomColor = colors.color !== defaultColor;
         const hasCustomIcon = colors.icon !== defaultIcon;
-        if (type === "note") {
-          console.log(`Note callout debug: current icon="${colors.icon}", default icon="${defaultIcon}", hasCustomIcon=${hasCustomIcon}`);
-        }
         if (hasCustomColor || hasCustomIcon) {
           css += `
 /* User customized built-in callout: ${type} */
@@ -1532,7 +1538,11 @@ var CalloutOrganizerSettingTab = class extends import_obsidian.PluginSettingTab 
     const updateIconPreview = () => {
       iconPreview.empty();
       if (colors.icon && colors.icon !== "none") {
-        (0, import_obsidian.setIcon)(iconPreview, colors.icon);
+        if (type === "note" && colors.icon === "pencil") {
+          iconPreview.innerHTML = OBSIDIAN_NOTE_ICON_SVG;
+        } else {
+          (0, import_obsidian.setIcon)(iconPreview, colors.icon);
+        }
         iconPreview.style.color = colors.color;
       }
     };

@@ -13,7 +13,7 @@ The Callout Organizer plugin helps you manage and navigate callouts throughout y
   - `package.json` - Dependencies and build scripts
 
 ## Version Information
-- **Current Version**: 1.0.0
+- **Current Version**: 1.0.1
 - **Minimum Obsidian Version**: 1.0.0
 - **Last Updated**: 2025-08-07
 
@@ -141,7 +141,29 @@ For issues or feature requests:
 3. Try disabling and re-enabling the plugin
 4. Check Obsidian developer console for error messages
 
-## Change Log (Version 1.0.0)
+## Change Log
+
+### Version 1.0.1 (2025-08-07)
+
+#### Bug Fixes
+- Fixed callout icons displaying in wrong positions
+- Fixed callout title colors not applying correctly  
+- Fixed note callout using wrong icon (now uses correct `lucide-pencil`)
+- Fixed toggle button width causing layout shifts
+- Fixed icon base size from 18px to 16px for better proportions
+
+#### Improvements
+- Moved breadcrumbs to bottom of callout items for better organization
+- Improved code consistency with constants for repeated SVG icons
+- Removed debug logging for cleaner console output
+- Enhanced visual layout and spacing
+
+#### Technical Changes
+- Created `OBSIDIAN_NOTE_ICON_SVG` constant for consistent note icon rendering
+- Cleaned up placeholder comments and redundant code
+- Maintained responsive icon scaling functionality
+
+### Version 1.0.0 (2025-08-07)
 
 ### New Features
 - Responsive icon sizing based on font size

@@ -1,5 +1,8 @@
 import { App, Plugin, PluginSettingTab, Setting, TFile, Modal, WorkspaceLeaf, ItemView, Notice, MarkdownRenderer, Component, setIcon, MarkdownView } from 'obsidian';
 
+// Constants for consistent icon rendering
+const OBSIDIAN_NOTE_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="svg-icon lucide-pencil"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"></path><path d="m15 5 4 4"></path></svg>`;
+
 interface CalloutColors {
     color: string; // Hex color like "#2ea4e5"
     icon: string; // Lucide icon name like "info" or ""
@@ -420,10 +423,17 @@ class CalloutOrganizerView extends ItemView {
             const iconName = this.plugin.settings.calloutColors[type]?.icon;
             if (iconName && iconName !== 'none') {
                 const iconEl = button.createEl("span", { cls: "callout-type-icon" });
-                setIcon(iconEl, iconName);
+                
+                // Special handling for note callout to ensure we get the correct lucide-pencil
+                if (type === 'note' && iconName === 'pencil') {
+                    iconEl.innerHTML = OBSIDIAN_NOTE_ICON_SVG;
+                } else {
+                    setIcon(iconEl, iconName);
+                }
+                
                 iconEl.style.marginRight = "4px";
-                iconEl.style.width = "calc(var(--callout-font-size, 14px) * 18 / 14)";
-                iconEl.style.height = "calc(var(--callout-font-size, 14px) * 18 / 14)";
+                iconEl.style.width = "calc(var(--callout-font-size, 14px) * 16 / 14)";
+                iconEl.style.height = "calc(var(--callout-font-size, 14px) * 16 / 14)";
                 iconEl.style.display = "inline-flex";
                 iconEl.style.alignItems = "center";
             }
@@ -656,8 +666,6 @@ class CalloutOrganizerView extends ItemView {
             calloutEl.style.opacity = '1';
         };
         
-        // Store breadcrumb creation for later (moved to bottom)
-        
         const header = calloutEl.createEl("div", { cls: "callout-organizer-header" });
         
         // Use callout title if available, otherwise use callout type
@@ -675,10 +683,17 @@ class CalloutOrganizerView extends ItemView {
             const iconName = this.plugin.settings.calloutColors[callout.type]?.icon;
             if (iconName && iconName !== 'none') {
                 const iconEl = titleEl.createEl("span", { cls: "callout-title-icon" });
-                setIcon(iconEl, iconName);
+                
+                // Special handling for note callout to ensure we get the correct lucide-pencil
+                if (callout.type === 'note' && iconName === 'pencil') {
+                    iconEl.innerHTML = OBSIDIAN_NOTE_ICON_SVG;
+                } else {
+                    setIcon(iconEl, iconName);
+                }
+                
                 iconEl.style.marginRight = "6px";
-                iconEl.style.width = "calc(var(--callout-font-size, 14px) * 18 / 14)";
-                iconEl.style.height = "calc(var(--callout-font-size, 14px) * 18 / 14)";
+                iconEl.style.width = "calc(var(--callout-font-size, 14px) * 16 / 14)";
+                iconEl.style.height = "calc(var(--callout-font-size, 14px) * 16 / 14)";
                 iconEl.style.display = "inline-flex";
                 iconEl.style.alignItems = "center";
                 iconEl.style.color = calloutColor;
@@ -1360,10 +1375,6 @@ export default class CalloutOrganizerPlugin extends Plugin {
                 const hasCustomColor = colors.color !== defaultColor;
                 const hasCustomIcon = colors.icon !== defaultIcon;
                 
-                // Debug logging for note callouts
-                if (type === 'note') {
-                    console.log(`Note callout debug: current icon="${colors.icon}", default icon="${defaultIcon}", hasCustomIcon=${hasCustomIcon}`);
-                }
                 
                 if (hasCustomColor || hasCustomIcon) {
                     // User has customized this built-in callout, apply globally with high specificity
@@ -2079,7 +2090,12 @@ class CalloutOrganizerSettingTab extends PluginSettingTab {
                 const updateIconPreview = () => {
                     iconPreview.empty();
                     if (colors.icon && colors.icon !== 'none') {
-                        setIcon(iconPreview, colors.icon);
+                        // Special handling for note callout to ensure we get the correct lucide-pencil
+                        if (type === 'note' && colors.icon === 'pencil') {
+                            iconPreview.innerHTML = OBSIDIAN_NOTE_ICON_SVG;
+                        } else {
+                            setIcon(iconPreview, colors.icon);
+                        }
                         iconPreview.style.color = colors.color;
                     }
                 };

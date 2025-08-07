@@ -11,9 +11,9 @@ A powerful plugin for organizing and navigating callouts across your Obsidian va
 - **Search Integration**: Find callouts by title, content, filename, headers, or block IDs
 
 ### 🎨 Visual Customization
-- **Responsive Icons**: Icons scale with font size for perfect readability
+- **Responsive Icons**: Icons scale with font size (16px base at 14px font) for perfect readability
 - **Color Customization**: Customize colors and icons for any callout type
-- **Built-in Support**: Automatic detection of Obsidian's built-in callout types
+- **Built-in Support**: Automatic detection of Obsidian's built-in callout types with correct icons
 - **Custom Callouts**: Full support for custom callout types
 
 ### 🧭 Enhanced Navigation
@@ -79,7 +79,7 @@ The plugin automatically detects and supports:
 ## Responsive Design
 
 Icons and text scale beautifully with your chosen font sizes:
-- **Base Size**: 18px icons at 14px font size
+- **Base Size**: 16px icons at 14px font size  
 - **Scaling**: Icons automatically resize when you change font sizes
 - **Square Icons**: Maintained aspect ratio at all sizes
 
@@ -144,6 +144,18 @@ For issues, questions, or feature requests, please check:
 MIT License - see LICENSE file for details
 
 ## Changelog
+
+### Version 1.0.1
+- 🐛 **Bug Fixes**:
+  - Fixed callout icons displaying correctly
+  - Fixed callout title colors using proper callout colors
+  - Fixed note callout icon to use correct `lucide-pencil`
+  - Fixed toggle button width preventing layout shifts
+  - Fixed icon base size for better visual proportions (16px)
+- ✨ **Improvements**:
+  - Moved breadcrumbs to bottom for better organization
+  - Enhanced visual layout and spacing
+  - Improved code consistency and performance
 
 ### Version 1.0.0
 - 🎉 **Initial Release**

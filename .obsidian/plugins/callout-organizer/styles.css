@@ -37,12 +37,12 @@
     height: 16px;
 }
 
-/* Responsive icon sizing for callout content */
+/* Responsive icon sizing for callout content - base size 16px at 14px font */
 .callout-organizer-item .callout-title svg,
 .callout-type-icon svg,
 .callout-title-icon svg {
-    width: calc(var(--callout-font-size, 14px) * 18 / 14);
-    height: calc(var(--callout-font-size, 14px) * 18 / 14);
+    width: calc(var(--callout-font-size, 14px) * 16 / 14);
+    height: calc(var(--callout-font-size, 14px) * 16 / 14);
     flex-shrink: 0;
 }
 

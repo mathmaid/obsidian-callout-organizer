@@ -24,7 +24,7 @@ This is an Obsidian vault for developing the callout-organizer plugin.
 
 ## Development Notes
 - Icons should be square and scale with font size
-- Default font size is 14px, icon base size is 18px
+- Default font size is 14px, icon base size is 16px
 - Use lucide-pencil for note callouts (not lucide-edit-3)
 - Some CSS changes require Obsidian restart to take effect
 
