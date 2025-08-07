@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "Tasks.md",
+                "file": "README.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "Tasks"
+              "title": "README"
             }
           }
         ]
@@ -78,8 +78,7 @@
       }
     ],
     "direction": "horizontal",
-    "width": 253.5,
-    "collapsed": true
+    "width": 253.5
   },
   "right": {
     "id": "8654dbb810ca01ad",
@@ -180,14 +179,16 @@
       "callout-organizer:Open Callout Organizer": false
     }
   },
-  "active": "09138bd8ad6c162c",
+  "active": "625ae2d0003b8a6f",
   "lastOpenFiles": [
+    "src/logo.svg",
+    "src/claude-seeklogo.svg",
+    "Tasks.md",
     "README.md",
     "Plugin Maintenance Guide.md",
     "Obsidian Built-in Callouts.md",
     "Custom Callouts.md",
     "CSS snippets example.md",
-    "Tasks.md",
     "src/colors.png",
     "src/custom.png",
     "src",
