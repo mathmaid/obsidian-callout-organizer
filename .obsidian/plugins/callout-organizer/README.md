@@ -34,6 +34,8 @@ Organize and manage callouts of all types across your Obsidian vault with enhanc
 
 ## Recommended CSS Snippets
 
+These CSS snippets can be added to the "Custom Callout CSS" setting and will apply to **all callouts** throughout Obsidian, including those in the editor and the plugin view.
+
 ### Enhanced Callout Styling
 Add these CSS snippets to the "Custom Callout CSS" setting for improved appearance:
 
@@ -57,7 +59,7 @@ transition: all 0.2s ease;
 ```
 
 ### Compact Layout
-For a more compact display:
+For a more compact display across all callouts:
 
 ```css
 /* Reduce padding and margins */
@@ -72,7 +74,7 @@ line-height: 1.4;
 ```
 
 ### Minimal Style
-For a clean, minimal appearance:
+For a clean, minimal appearance throughout Obsidian:
 
 ```css
 /* Remove background and use only border */
@@ -83,6 +85,25 @@ box-shadow: none;
 
 /* Minimal padding */
 padding: 8px 12px;
+```
+
+### Glass Effect
+For a modern glass-like appearance:
+
+```css
+/* Glass morphism effect */
+background: rgba(255, 255, 255, 0.1);
+backdrop-filter: blur(10px);
+border: 1px solid rgba(255, 255, 255, 0.2);
+border-radius: 12px;
+box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+
+/* Subtle hover effect */
+transition: all 0.3s ease;
+&:hover {
+    background: rgba(255, 255, 255, 0.15);
+    transform: translateY(-2px);
+}
 ```
 
 ## Configuration

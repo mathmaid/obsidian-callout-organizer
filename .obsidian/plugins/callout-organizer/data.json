@@ -1,5 +1,7 @@
 {
-  "excludedFolders": [],
+  "excludedFolders": [
+    "space"
+  ],
   "groupByType": false,
   "searchInFilenames": true,
   "searchInHeaders": true,
@@ -19,7 +21,7 @@
   "breadcrumbFontSize": 12,
   "useEmbedLinks": true,
   "invisibleEmbeddings": true,
-  "customCalloutCSS": "",
+  "customCalloutCSS": "--callout-border-opacity: 1;\n--callout-radius: 0;\n--callout-border-width: 0.1em;\nbackground-color: var(--background-primary);\nborder-color: rgba(var(--callout-color), var(--callout-border-opacity));\nborder-left-width: 0.3em;",
   "calloutColors": {
     "abstract": {
       "color": "#00bfbc",
@@ -128,6 +130,38 @@
     "warning": {
       "color": "#ec7500",
       "icon": "alert-triangle"
+    },
+    "corollary": {
+      "color": "#e56eee",
+      "icon": "none"
+    },
+    "definition": {
+      "color": "#2ea8e5",
+      "icon": "none"
+    },
+    "lemma": {
+      "color": "#f5ca00",
+      "icon": "none"
+    },
+    "proposition": {
+      "color": "#a28ae5",
+      "icon": "none"
+    },
+    "theorem": {
+      "color": "#f19837",
+      "icon": "none"
+    },
+    "conjecture": {
+      "color": "#ff6699",
+      "icon": "none"
+    },
+    "exercise": {
+      "color": "#5fb236",
+      "icon": "none"
+    },
+    "remark": {
+      "color": "#ff6666",
+      "icon": "none"
     }
   }
 }

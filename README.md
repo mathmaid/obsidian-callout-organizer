@@ -2,7 +2,7 @@
 
 A powerful plugin for organizing and navigating callouts across your Obsidian vault.
 
-![[Pasted image 20250807135550.png]]
+![](src/Builtin.png)
 
 ## Features
 
@@ -12,11 +12,12 @@ A powerful plugin for organizing and navigating callouts across your Obsidian va
 - **Type Filtering**: Filter callouts by type with visual buttons
 - **Search Integration**: Find callouts by title, content, filename, headers, or block IDs
 
+![](video1.mov)
+
 ### 🎨 Visual Customization
-- **Responsive Icons**: Icons scale with font size (16px base at 14px font) for perfect readability
 - **Color Customization**: Customize colors and icons for any callout type
-- **Built-in Support**: Automatic detection of Obsidian's built-in callout types with correct icons
-- **Custom Callouts**: Full support for custom callout types
+- **Built-in Support**: Automatic detection of Obsidian's built-in callout types
+- **Custom Callouts**: Automatic detection of custom callout types
 
 ### 🧭 Enhanced Navigation
 - **One-Click Navigation**: Click any callout to jump to its location

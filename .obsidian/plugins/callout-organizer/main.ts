@@ -1425,11 +1425,11 @@ export default class CalloutOrganizerPlugin extends Plugin {
             }
         }
         
-        // Add custom CSS if specified (scoped to organizer only)
+        // Add custom CSS if specified (applies to all callouts globally)
         if (this.settings.customCalloutCSS) {
             css += `
-/* Custom Callout CSS - Organizer Only */
-.callout-organizer-item.callout {
+/* Custom Callout CSS - Global */
+.callout {
     ${this.settings.customCalloutCSS}
 }`;
         }
@@ -1980,7 +1980,7 @@ class CalloutOrganizerSettingTab extends PluginSettingTab {
         
         new Setting(calloutOptionsContainer)
             .setName('Custom Callout CSS')
-            .setDesc('Add custom CSS properties for all callouts. See recommended CSS snippets at: https://github.com/mathmaid/obsidian-callout-organizer')
+            .setDesc('Add custom CSS properties that apply to ALL callouts throughout Obsidian (editor and plugin). See recommended CSS snippets at: https://github.com/mathmaid/obsidian-callout-organizer')
             .addTextArea(text => {
                 text.setPlaceholder('/* custom css snippets */');
                 text.setValue(this.plugin.settings.customCalloutCSS);

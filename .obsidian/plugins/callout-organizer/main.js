@@ -1126,8 +1126,8 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
     }
     if (this.settings.customCalloutCSS) {
       css += `
-/* Custom Callout CSS - Organizer Only */
-.callout-organizer-item.callout {
+/* Custom Callout CSS - Global */
+.callout {
     ${this.settings.customCalloutCSS}
 }`;
     }
@@ -1463,7 +1463,7 @@ var CalloutOrganizerSettingTab = class extends import_obsidian.PluginSettingTab 
       cls: "setting-item-description"
     });
     calloutOptionsContainer.createEl("h4", { text: "Custom CSS" });
-    new import_obsidian.Setting(calloutOptionsContainer).setName("Custom Callout CSS").setDesc("Add custom CSS properties for all callouts. See recommended CSS snippets at: https://github.com/mathmaid/obsidian-callout-organizer").addTextArea((text) => {
+    new import_obsidian.Setting(calloutOptionsContainer).setName("Custom Callout CSS").setDesc("Add custom CSS properties that apply to ALL callouts throughout Obsidian (editor and plugin). See recommended CSS snippets at: https://github.com/mathmaid/obsidian-callout-organizer").addTextArea((text) => {
       text.setPlaceholder("/* custom css snippets */");
       text.setValue(this.plugin.settings.customCalloutCSS);
       text.onChange(async (value) => {

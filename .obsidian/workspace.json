@@ -4,11 +4,11 @@
     "type": "split",
     "children": [
       {
-        "id": "c826b9a8bca1914d",
+        "id": "97e2007d58b419ee",
         "type": "tabs",
         "children": [
           {
-            "id": "5f560c91bee03046",
+            "id": "09138bd8ad6c162c",
             "type": "leaf",
             "state": {
               "type": "markdown",
@@ -78,7 +78,8 @@
       }
     ],
     "direction": "horizontal",
-    "width": 554.5
+    "width": 253.5,
+    "collapsed": true
   },
   "right": {
     "id": "8654dbb810ca01ad",
@@ -158,7 +159,7 @@
               "type": "callout-organizer",
               "state": {},
               "icon": "album",
-              "title": "Callout View"
+              "title": "Callout Search"
             }
           }
         ],
@@ -166,7 +167,7 @@
       }
     ],
     "direction": "horizontal",
-    "width": 540.5
+    "width": 546.5
   },
   "left-ribbon": {
     "hiddenItems": {
@@ -179,16 +180,23 @@
       "callout-organizer:Open Callout Organizer": false
     }
   },
-  "active": "625ae2d0003b8a6f",
+  "active": "09138bd8ad6c162c",
   "lastOpenFiles": [
-    "src",
-    "src/Pasted image 20250807135550.png",
-    "attachments",
+    "src/video1.mov",
     "Tasks.md",
+    "Custom Callouts.md",
     "Obsidian Built-in Callouts.md",
-    "README.md",
     "Plugin Maintenance Guide.md",
+    "README.md",
+    "CSS snippets example.md",
     "CLAUDE.md",
+    "src/Builtin.png",
+    "src/Custom.png",
+    "src/Pasted image 20250807140721.png",
+    "space",
+    "src/interference.png",
+    "src",
+    "attachments",
     "main.js",
     "styles.css",
     "main.ts",
