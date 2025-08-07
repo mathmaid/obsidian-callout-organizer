@@ -991,7 +991,17 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
       "example": "#7852EE",
       // Gray family
       "quote": "#9E9E9E",
-      "cite": "#9E9E9E"
+      "cite": "#9E9E9E",
+      // Mathematical/Academic callouts (supporting academic workflows)
+      "theorem": "#F19837",
+      "lemma": "#F5CA00",
+      "proposition": "#A28AE5",
+      "definition": "#2EA4E5",
+      "corollary": "#E56EEE",
+      "conjecture": "#FF6699",
+      "remark": "#FF6666",
+      "exercise": "#FF6699",
+      "problem": "#FF6699"
     };
     return builtinColors[type] || "#086DDD";
   }
@@ -1030,7 +1040,17 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
       "example": "list",
       // Gray family
       "quote": "quote",
-      "cite": "quote"
+      "cite": "quote",
+      // Mathematical/Academic callouts (common in academic vaults)
+      "theorem": "zap",
+      "lemma": "lightbulb",
+      "proposition": "star",
+      "definition": "book-open",
+      "corollary": "arrow-right",
+      "conjecture": "help-circle",
+      "remark": "message-circle",
+      "exercise": "dumbbell",
+      "problem": "puzzle"
     };
     return builtinIcons[type] || "pencil";
   }

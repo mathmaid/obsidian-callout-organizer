@@ -1,0 +1,13 @@
+/* Base callout styling */
+.callout {
+    page-break-inside: avoid;
+}
+
+.callout-content p {
+    margin-top: 0.1em;
+    margin-bottom: 0.1em;
+}
+
+.callout-title {
+    font-family: "CMU Sans Serif Demi Condensed";
+}

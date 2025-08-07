@@ -1,16 +1,17 @@
 # Callout Organizer Plugin
 
-Organize and manage callouts of all types across your Obsidian vault with enhanced navigation, search, and customization features.
+A powerful Obsidian plugin for organizing, navigating, and customizing callouts across your entire vault. Perfect for academic notes, documentation, and content management.
 
-## Features
+## 🌟 Key Features
 
-- **Dual View Modes**: Switch between Current File and All Files search modes
-- **Advanced Search**: Search across filenames, headers, callout titles, IDs, and content
-- **Drag & Drop**: Create embed or regular links by dragging callouts
-- **Custom Styling**: Customize colors and icons for all callout types
-- **Invisible Embeddings**: Make embedded callouts appear seamlessly without borders
-- **Flexible Display Options**: Control which headers and elements to show in navigation
-- **Real-time Updates**: Live refresh and caching for optimal performance
+- **🔄 Dual View Modes**: Switch between Current File and All Files search modes
+- **🔍 Advanced Search**: Search across filenames, headers, callout titles, IDs, and content
+- **📎 Drag & Drop**: Create embed or regular links by dragging callouts
+- **🎨 Custom Styling**: Customize colors and icons for all callout types (including math callouts)
+- **👻 Invisible Embeddings**: Make embedded callouts appear seamlessly without borders (enabled by default)
+- **📋 Flexible Display Options**: Control which headers and elements to show in navigation
+- **⚡ Real-time Updates**: Live refresh and caching for optimal performance
+- **🧮 Academic Support**: Built-in support for mathematical callouts (theorem, lemma, definition, etc.)
 
 ## Installation
 
@@ -135,10 +136,72 @@ transition: all 0.3s ease;
 4. **Styling**: Combine custom CSS with color customization for unique appearances
 5. **Search**: Use multiple keywords for more precise search results
 
-## Support
+## 📚 Supported Callout Types
 
-For issues, feature requests, or contributions, visit the [GitHub repository](https://github.com/mathmaid/obsidian-callout-organizer).
+The plugin automatically detects and provides default styling for:
 
-## License
+### Standard Obsidian Callouts
+- **Blue**: note, info, todo
+- **Teal**: abstract, summary, tldr, tip, hint, important
+- **Green**: success, check, done
+- **Orange**: question, help, faq, warning, caution, attention
+- **Red**: failure, fail, missing, danger, error, bug
+- **Purple**: example
+- **Gray**: quote, cite
+
+### Academic/Mathematical Callouts
+- **theorem** 🔥 - Orange theme with zap icon
+- **lemma** 💡 - Yellow theme with lightbulb icon
+- **proposition** ⭐ - Purple theme with star icon
+- **definition** 📖 - Blue theme with book-open icon
+- **corollary** ➡️ - Pink theme with arrow-right icon
+- **conjecture** ❓ - Pink theme with help-circle icon
+- **remark** 💬 - Red theme with message-circle icon
+- **exercise** 🏋️ - Pink theme with dumbbell icon
+- **problem** 🧩 - Pink theme with puzzle icon
+
+## 🔧 Troubleshooting
+
+### Common Issues
+
+1. **Callouts not appearing**: Check if folders are excluded in Search Options
+2. **Custom colors not applying**: Try restarting Obsidian for CSS changes to take effect
+3. **Search results empty**: Verify search fields are enabled in settings
+4. **Performance issues**: Reduce max search results or exclude large folders
+
+### Performance Tips
+
+- Use folder exclusions for large vaults (>1000 files)
+- Enable "Group by Type" for better organization
+- Adjust max search results based on your needs
+- Use specific search terms for better performance
+
+## 🔄 Version History
+
+### v1.1.0 (Current)
+- ✨ Added invisible embeddings feature (enabled by default)
+- 🌍 Custom CSS now applies globally to all callouts
+- 🐛 Fixed reset button page jumping issue
+- 📂 Reorganized settings hierarchy
+- 🧮 Added support for mathematical/academic callout types
+- 📚 Comprehensive documentation and README
+
+### v1.0.1
+- 🐛 Bug fixes and stability improvements
+
+### v1.0.0
+- 🎉 Initial release with core functionality
+
+## 🤝 Contributing
+
+Contributions are welcome! Please feel free to submit pull requests or open issues on the [GitHub repository](https://github.com/mathmaid/obsidian-callout-organizer).
+
+## 📄 License
 
 MIT License - see LICENSE file for details.
+
+## 🙏 Acknowledgments
+
+- Built for the Obsidian community
+- Inspired by academic note-taking workflows
+- Special thanks to users providing feedback and suggestions

@@ -1278,7 +1278,11 @@ export default class CalloutOrganizerPlugin extends Plugin {
             // Purple family
             'example': '#7852EE',
             // Gray family
-            'quote': '#9E9E9E', 'cite': '#9E9E9E'
+            'quote': '#9E9E9E', 'cite': '#9E9E9E',
+            // Mathematical/Academic callouts (supporting academic workflows)
+            'theorem': '#F19837', 'lemma': '#F5CA00', 'proposition': '#A28AE5',
+            'definition': '#2EA4E5', 'corollary': '#E56EEE', 'conjecture': '#FF6699',
+            'remark': '#FF6666', 'exercise': '#FF6699', 'problem': '#FF6699'
         };
         
         // Return builtin color if available, otherwise default to note color
@@ -1304,7 +1308,11 @@ export default class CalloutOrganizerPlugin extends Plugin {
             // Purple family
             'example': 'list',
             // Gray family
-            'quote': 'quote', 'cite': 'quote'
+            'quote': 'quote', 'cite': 'quote',
+            // Mathematical/Academic callouts (common in academic vaults)
+            'theorem': 'zap', 'lemma': 'lightbulb', 'proposition': 'star',
+            'definition': 'book-open', 'corollary': 'arrow-right', 'conjecture': 'help-circle',
+            'remark': 'message-circle', 'exercise': 'dumbbell', 'problem': 'puzzle'
         };
         
         // Return builtin icon if available, otherwise default to note icon

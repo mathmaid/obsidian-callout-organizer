@@ -139,6 +139,19 @@ border-color: rgba(var(--callout-color), var(--callout-border-opacity));
 border-left-width: 0.3em;
 ```
 
+Here are the recommended colors of my custom callouts:
+
+<div style="font-weight: bold;color: rgb(255,102,153)">RGB for conjecture is 255, 102, 153</div>
+<div style="font-weight: bold;color: rgb(46,168,229)">RGB for definition is 255, 102, 153</div>
+<div style="font-weight: bold;color: rgb(241,152,55)">RGB for theorem is 241, 152, 55</div>
+<div style="font-weight: bold;color: rgb(255,102,102)">RGB for remark is 255, 102, 102</div>
+<div style="font-weight: bold;color: rgb(95,178,54)">RGB for exercise is 95, 178, 54</div>
+<div style="font-weight: bold;color: rgb(162,138,229)">RGB for proposition is 162, 138, 229</div>
+<div style="font-weight: bold;color: rgb(245,202,0)">RGB for conjecture is 245, 202, 0</div>
+<div style="font-weight: bold;color: rgb(229,110,238)">RGB for corollary is 229, 110, 238</div>
+
+The inspiration of this color scheme comes from Zotero and Bilibili.
+
 ## License
 
 MIT License - see LICENSE file for details

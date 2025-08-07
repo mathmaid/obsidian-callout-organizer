@@ -4,11 +4,11 @@
     "type": "split",
     "children": [
       {
-        "id": "97e2007d58b419ee",
+        "id": "71a6b47062d9faa8",
         "type": "tabs",
         "children": [
           {
-            "id": "09138bd8ad6c162c",
+            "id": "ac3ac9c427ee8575",
             "type": "leaf",
             "state": {
               "type": "markdown",
@@ -179,12 +179,15 @@
       "callout-organizer:Open Callout Organizer": false
     }
   },
-  "active": "625ae2d0003b8a6f",
+  "active": "ac3ac9c427ee8575",
   "lastOpenFiles": [
-    "src/logo.svg",
-    "src/claude-seeklogo.svg",
     "Tasks.md",
     "README.md",
+    "src/builtin.png",
+    "src/截屏2025-08-07 14.08.56.png",
+    "src/Pasted image 20250807153642.png",
+    "src/logo.svg",
+    "src/claude-seeklogo.svg",
     "Plugin Maintenance Guide.md",
     "Obsidian Built-in Callouts.md",
     "Custom Callouts.md",
@@ -195,7 +198,6 @@
     "未命名.md",
     "src/video1.mov",
     "CLAUDE.md",
-    "src/builtin.png",
     "src/Custom.png",
     "src/Pasted image 20250807140721.png",
     "space",
