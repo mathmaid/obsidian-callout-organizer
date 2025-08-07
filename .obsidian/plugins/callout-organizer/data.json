@@ -21,7 +21,7 @@
   "breadcrumbFontSize": 12,
   "useEmbedLinks": true,
   "invisibleEmbeddings": true,
-  "customCalloutCSS": "--callout-border-opacity: 1;\n--callout-radius: 0;\n--callout-border-width: 0.1em;\nbackground-color: var(--background-primary);\nborder-color: rgba(var(--callout-color), var(--callout-border-opacity));\nborder-left-width: 0.3em;",
+  "customCalloutCSS": "",
   "calloutColors": {
     "abstract": {
       "color": "#00bfbc",

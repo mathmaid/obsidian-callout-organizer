@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "README.md",
+                "file": "Tasks.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "README"
+              "title": "Tasks"
             }
           }
         ]
@@ -182,17 +182,17 @@
   },
   "active": "09138bd8ad6c162c",
   "lastOpenFiles": [
-    "Custom Callouts.md",
+    "README.md",
     "Plugin Maintenance Guide.md",
     "Obsidian Built-in Callouts.md",
+    "Custom Callouts.md",
+    "CSS snippets example.md",
     "Tasks.md",
-    "README.md",
     "src/colors.png",
     "src/custom.png",
     "src",
     "未命名.md",
     "src/video1.mov",
-    "CSS snippets example.md",
     "CLAUDE.md",
     "src/builtin.png",
     "src/Custom.png",
