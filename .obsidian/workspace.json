@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "README.md",
+                "file": "Tasks.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "README"
+              "title": "Tasks"
             }
           }
         ]
@@ -166,7 +166,7 @@
       }
     ],
     "direction": "horizontal",
-    "width": 560.5
+    "width": 446.5
   },
   "left-ribbon": {
     "hiddenItems": {
@@ -181,23 +181,26 @@
   },
   "active": "ac3ac9c427ee8575",
   "lastOpenFiles": [
-    "Tasks.md",
     "README.md",
+    "Tasks.md",
+    "README.md.tmp.41287.1754667697029",
+    "Plugin Maintenance Guide.md.tmp.41287.1754667688411",
+    "Plugin Maintenance Guide.md.tmp.41287.1754667680368",
+    "Custom Callouts.md",
+    "CLAUDE.md",
+    "Plugin Maintenance Guide.md",
     "src/builtin.png",
     "src/截屏2025-08-07 14.08.56.png",
     "src/Pasted image 20250807153642.png",
     "src/logo.svg",
     "src/claude-seeklogo.svg",
-    "Plugin Maintenance Guide.md",
     "Obsidian Built-in Callouts.md",
-    "Custom Callouts.md",
     "CSS snippets example.md",
     "src/colors.png",
     "src/custom.png",
     "src",
     "未命名.md",
     "src/video1.mov",
-    "CLAUDE.md",
     "src/Custom.png",
     "src/Pasted image 20250807140721.png",
     "space",
@@ -206,9 +209,6 @@
     "attachments",
     "main.js",
     "styles.css",
-    "main.ts",
-    "manifest.json",
-    "LICENSE",
     "README.md.md",
     "callout-organizer.md"
   ]

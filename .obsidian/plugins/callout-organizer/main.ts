@@ -31,6 +31,7 @@ interface CalloutOrganizerSettings {
     // Drag options
     useEmbedLinks: boolean;
     invisibleEmbeddings: boolean;
+    hideFileNamesInLinks: boolean;
     // Callout options
     customCalloutCSS: string;
     // Callout color customization
@@ -60,6 +61,7 @@ const DEFAULT_SETTINGS: CalloutOrganizerSettings = {
     // Drag options
     useEmbedLinks: true, // Use embed links by default
     invisibleEmbeddings: true, // Enable invisible embeddings by default
+    hideFileNamesInLinks: false, // Hide file names in links by default (disabled)
     // Callout options
     customCalloutCSS: '',
     // Callout colors will be dynamically populated based on detected callouts in vault
@@ -643,8 +645,17 @@ class CalloutOrganizerView extends ItemView {
                 
                 // Create the link using only filename (without folder path)
                 const useEmbed = this.plugin.settings.useEmbedLinks;
-                const filename = callout.file.split('/').pop()?.replace(/\.md$/, '') || callout.file;
-                const linkText = useEmbed ? `![[${filename}#^${blockId}]]` : `[[${filename}#^${blockId}]]`;
+                const filenameWithExt = callout.file.split('/').pop() || callout.file;
+                const filename = filenameWithExt.replace(/\.md$/, '');
+                
+                let linkText: string;
+                if (this.plugin.settings.hideFileNamesInLinks) {
+                    // Generate alias to hide filename
+                    const alias = this.generateCalloutAlias(callout, blockId);
+                    linkText = useEmbed ? `![[${filename}#^${blockId}|${alias}]]` : `[[${filename}#^${blockId}|${alias}]]`;
+                } else {
+                    linkText = useEmbed ? `![[${filename}#^${blockId}]]` : `[[${filename}#^${blockId}]]`;
+                }
                 
                 e.dataTransfer.setData('text/plain', linkText);
                 e.dataTransfer.effectAllowed = 'copy';
@@ -813,6 +824,12 @@ class CalloutOrganizerView extends ItemView {
 
 
 
+    generateCalloutAlias(callout: CalloutItem, blockId: string): string {
+        // Generate alias using only the callout ID
+        // e.g., "theorem-def456", "note-abc123", "example-xyz789"
+        return blockId;
+    }
+
     generateCalloutId(callout: CalloutItem): string {
         // Generate 6-character random alphanumeric ID in format: type-******
         const type = callout.type.toLowerCase();
@@ -823,6 +840,7 @@ class CalloutOrganizerView extends ItemView {
         }
         return `${type}-${randomChars}`;
     }
+
 
     async addBlockIdToCallout(callout: CalloutItem, blockId: string): Promise<void> {
         try {
@@ -1862,6 +1880,16 @@ class CalloutOrganizerSettingTab extends PluginSettingTab {
                     this.plugin.settings.invisibleEmbeddings = value;
                     await this.plugin.saveSettings();
                     this.plugin.injectCustomCalloutCSS();
+                }));
+
+        new Setting(dragContainer)
+            .setName('Hide file names in links')
+            .setDesc('When dragging callouts, hide file names by adding aliases. Example: [[filename#^theorem-def456|theorem-def456]]')
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.hideFileNamesInLinks)
+                .onChange(async (value) => {
+                    this.plugin.settings.hideFileNamesInLinks = value;
+                    await this.plugin.saveSettings();
                 }));
 
         containerEl.createEl('h3', {text: 'Search Options'});

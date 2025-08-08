@@ -33,6 +33,7 @@ A powerful plugin for organizing, searching, navigating, and citing callouts acr
 - **Link Generation**: Drag callouts to create links automatically
 - **Embed Support**: Option to create embed links (`![[...]]`) or regular links
 - **Auto Callout IDs**: Automatically adds callout IDs when dragging callouts
+- **Hide File Names**: Option to hide filenames in links using aliases (e.g., `[[file#^id|id]]`)
 
 ## Installation
 
@@ -61,6 +62,7 @@ A powerful plugin for organizing, searching, navigating, and citing callouts acr
 - **Create Links**: Drag any callout to your editor to create a link
 - **Block IDs**: Block IDs are automatically generated when needed
 - **Embed Mode**: Toggle embed links in settings for `![[...]]` vs `[[...]]` format
+- **Hidden Filenames**: Enable "Hide file names in links" to create cleaner links with aliases
 
 ## Potential Problems
 
@@ -111,6 +113,10 @@ You should avoid using:
 
 In the second case, the auto callout IDs will not function properly.
 
+### Callouts in Code Blocks
+
+You may have some callouts in code blocks somewhere. These callouts can also be found in the callout organizer. But when dragging it into the document, the callout will not be found since it is in the code block.
+
 ## Settings
 
 ### Display Options
@@ -157,6 +163,17 @@ The inspiration of this color scheme comes from Zotero and Bilibili.
 MIT License - see LICENSE file for details
 
 ## Changelog
+
+### Version 1.1.0
+- 🎉 **New Feature**:
+  - **Hide File Names in Links**: New drag option to create cleaner links with aliases
+  - When enabled, dragged callouts generate links like `[[filename#^theorem-def456|theorem-def456]]`
+  - Uses actual callout ID as alias for better readability
+  - Works with both regular and embed links
+- 🔧 **Code Improvements**:
+  - Optimized filename extraction logic
+  - Enhanced drag functionality performance
+  - Updated setting descriptions for clarity
 
 ### Version 1.0.1
 - 🐛 **Bug Fixes**:

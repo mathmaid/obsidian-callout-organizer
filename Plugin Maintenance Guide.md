@@ -13,9 +13,9 @@ The Callout Organizer plugin helps you manage and navigate callouts throughout y
   - `package.json` - Dependencies and build scripts
 
 ## Version Information
-- **Current Version**: 1.0.1
+- **Current Version**: 1.1.0
 - **Minimum Obsidian Version**: 1.0.0
-- **Last Updated**: 2025-08-07
+- **Last Updated**: 2025-08-08
 
 ## Key Features
 
@@ -51,6 +51,8 @@ The Callout Organizer plugin helps you manage and navigate callouts throughout y
 
 ### Drag Options
 - **Use Embed Links**: Creates `![[file#^id]]` instead of `[[file#^id]]`
+- **Invisible Embeddings**: Makes embedded callouts appear seamlessly without padding or borders
+- **Hide File Names in Links**: Adds aliases to links to hide filenames (e.g., `[[file#^id|id]]`)
 
 ### Callout Options
 - **Callout Colors**: Customize colors and icons for built-in and custom callout types
@@ -142,6 +144,20 @@ For issues or feature requests:
 4. Check Obsidian developer console for error messages
 
 ## Change Log
+
+### Version 1.1.0 (2025-08-08)
+
+#### New Features
+- **Hide File Names in Links**: Added new drag option to hide filenames in generated links by using aliases
+  - When enabled, dragged callouts create links like `[[filename#^theorem-def456|theorem-def456]]`
+  - Uses the actual callout ID as the alias for clean, readable links
+  - Works with both regular links and embed links
+  - Disabled by default to maintain backward compatibility
+
+#### Code Improvements
+- Optimized filename extraction logic for better null handling
+- Enhanced drag functionality with cleaner alias generation
+- Updated setting descriptions with accurate examples
 
 ### Version 1.0.1 (2025-08-07)
 

@@ -21,6 +21,7 @@
   "breadcrumbFontSize": 12,
   "useEmbedLinks": true,
   "invisibleEmbeddings": true,
+  "hideFileNamesInLinks": true,
   "customCalloutCSS": "",
   "calloutColors": {
     "abstract": {

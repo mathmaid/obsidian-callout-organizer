@@ -55,6 +55,8 @@ var DEFAULT_SETTINGS = {
   // Use embed links by default
   invisibleEmbeddings: true,
   // Enable invisible embeddings by default
+  hideFileNamesInLinks: false,
+  // Hide file names in links by default (disabled)
   // Callout options
   customCalloutCSS: "",
   // Callout colors will be dynamically populated based on detected callouts in vault
@@ -467,7 +469,6 @@ var CalloutOrganizerView = class extends import_obsidian.ItemView {
       this.openFile(callout.file, callout.lineNumber, e.ctrlKey || e.metaKey);
     };
     calloutEl.ondragstart = (e) => {
-      var _a2;
       if (e.dataTransfer) {
         let blockId = callout.blockId;
         let needsNewId = false;
@@ -477,8 +478,15 @@ var CalloutOrganizerView = class extends import_obsidian.ItemView {
           needsNewId = true;
         }
         const useEmbed = this.plugin.settings.useEmbedLinks;
-        const filename = ((_a2 = callout.file.split("/").pop()) == null ? void 0 : _a2.replace(/\.md$/, "")) || callout.file;
-        const linkText = useEmbed ? `![[${filename}#^${blockId}]]` : `[[${filename}#^${blockId}]]`;
+        const filenameWithExt = callout.file.split("/").pop() || callout.file;
+        const filename = filenameWithExt.replace(/\.md$/, "");
+        let linkText;
+        if (this.plugin.settings.hideFileNamesInLinks) {
+          const alias = this.generateCalloutAlias(callout, blockId);
+          linkText = useEmbed ? `![[${filename}#^${blockId}|${alias}]]` : `[[${filename}#^${blockId}|${alias}]]`;
+        } else {
+          linkText = useEmbed ? `![[${filename}#^${blockId}]]` : `[[${filename}#^${blockId}]]`;
+        }
         e.dataTransfer.setData("text/plain", linkText);
         e.dataTransfer.effectAllowed = "copy";
         calloutEl.style.opacity = "0.5";
@@ -598,6 +606,9 @@ var CalloutOrganizerView = class extends import_obsidian.ItemView {
       });
     });
     return grouped;
+  }
+  generateCalloutAlias(callout, blockId) {
+    return blockId;
   }
   generateCalloutId(callout) {
     const type = callout.type.toLowerCase();
@@ -1422,6 +1433,10 @@ var CalloutOrganizerSettingTab = class extends import_obsidian.PluginSettingTab 
       this.plugin.settings.invisibleEmbeddings = value;
       await this.plugin.saveSettings();
       this.plugin.injectCustomCalloutCSS();
+    }));
+    new import_obsidian.Setting(dragContainer).setName("Hide file names in links").setDesc("When dragging callouts, hide file names by adding aliases. Example: [[filename#^theorem-def456|theorem-def456]]").addToggle((toggle) => toggle.setValue(this.plugin.settings.hideFileNamesInLinks).onChange(async (value) => {
+      this.plugin.settings.hideFileNamesInLinks = value;
+      await this.plugin.saveSettings();
     }));
     containerEl.createEl("h3", { text: "Search Options" });
     const searchContainer = containerEl.createEl("div", { cls: "callout-settings-indent" });
