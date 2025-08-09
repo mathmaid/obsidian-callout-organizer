@@ -1,7 +1,5 @@
 {
-  "excludedFolders": [
-    "space"
-  ],
+  "excludedFolders": [],
   "groupByType": false,
   "searchInFilenames": true,
   "searchInHeaders": true,
@@ -164,5 +162,7 @@
       "color": "#ff6666",
       "icon": "none"
     }
-  }
+  },
+  "showCurrentFileInSearch": true,
+  "showOutlinksInCurrentFile": true
 }

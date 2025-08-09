@@ -142,13 +142,13 @@
             "state": {
               "type": "outline",
               "state": {
-                "file": "欢迎.md",
+                "file": "Tasks.md",
                 "followCursor": false,
                 "showSearch": false,
                 "searchQuery": ""
               },
               "icon": "lucide-list",
-              "title": "欢迎 的大纲"
+              "title": "Tasks 的大纲"
             }
           },
           {
@@ -179,27 +179,29 @@
       "callout-organizer:Open Callout Organizer": false
     }
   },
-  "active": "ac3ac9c427ee8575",
+  "active": "738c34307f839749",
   "lastOpenFiles": [
-    "README.md",
+    "Custom Callouts.md",
     "Tasks.md",
+    "Tasks.md.tmp.16386.1754713922496",
+    "README.md",
+    "Plugin Maintenance Guide.md",
+    "CLAUDE.md",
+    "Obsidian Built-in Callouts.md",
+    "Notes/Newton Transformation.md",
+    "Notes",
     "README.md.tmp.41287.1754667697029",
     "Plugin Maintenance Guide.md.tmp.41287.1754667688411",
     "Plugin Maintenance Guide.md.tmp.41287.1754667680368",
-    "Custom Callouts.md",
-    "CLAUDE.md",
-    "Plugin Maintenance Guide.md",
     "src/builtin.png",
     "src/截屏2025-08-07 14.08.56.png",
     "src/Pasted image 20250807153642.png",
     "src/logo.svg",
     "src/claude-seeklogo.svg",
-    "Obsidian Built-in Callouts.md",
     "CSS snippets example.md",
     "src/colors.png",
     "src/custom.png",
     "src",
-    "未命名.md",
     "src/video1.mov",
     "src/Custom.png",
     "src/Pasted image 20250807140721.png",
@@ -207,8 +209,6 @@
     "src/interference.png",
     "src",
     "attachments",
-    "main.js",
-    "styles.css",
     "README.md.md",
     "callout-organizer.md"
   ]

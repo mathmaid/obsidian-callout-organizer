@@ -13,9 +13,9 @@ The Callout Organizer plugin helps you manage and navigate callouts throughout y
   - `package.json` - Dependencies and build scripts
 
 ## Version Information
-- **Current Version**: 1.1.0
+- **Current Version**: 1.1.1
 - **Minimum Obsidian Version**: 1.0.0
-- **Last Updated**: 2025-08-08
+- **Last Updated**: 2025-08-09
 
 ## Key Features
 
@@ -78,9 +78,10 @@ The Callout Organizer plugin helps you manage and navigate callouts throughout y
 - Clear the plugin cache using the refresh button
 
 #### Callouts Not Found
-- Ensure callouts follow proper markdown syntax: `> [!type] Title`
-- Check that folders aren't excluded in search settings
-- Verify files have .md extension
+- ~~Ensure callouts follow proper markdown syntax: `> [!type] Title`~~ *(Fixed in 1.1.1)*
+- ~~Check that folders aren't excluded in search settings~~ *(Enhanced in 1.1.1)*  
+- ~~Verify files have .md extension~~ *(Improved detection in 1.1.1)*
+- **Note**: Search functionality has been significantly improved in version 1.1.1 to detect callouts in all files
 
 ### Development and Updates
 
@@ -144,6 +145,25 @@ For issues or feature requests:
 4. Check Obsidian developer console for error messages
 
 ## Change Log
+
+### Version 1.1.1 (2025-08-09)
+
+#### Bug Fixes
+- **Fixed Search Functionality**: Resolved issue where plugin failed to find callouts in old files created before plugin installation
+- **Enhanced File Detection**: Improved algorithm to ensure all markdown files are properly scanned for callouts
+- **Better Cache Management**: Fixed cache invalidation issues that caused some callouts to be missed
+
+#### Improvements  
+- **Always Include Current File**: Search mode now permanently includes callouts from the current file
+- **Simplified Settings**: Removed confusing "Display current file in search" option - this is now default behavior
+- **Enhanced File Processing**: Added better file tracking to prevent files from being skipped during search
+- **Improved Reliability**: Strengthened file processing logic with Set-based tracking
+
+#### Technical Changes
+- Modified `extractAllCallouts()` to always process current file first
+- Removed `showCurrentFileInSearch` setting and related UI controls
+- Enhanced file processing with `processedFiles` Set to prevent duplicates
+- Simplified search logic for better maintainability
 
 ### Version 1.1.0 (2025-08-08)
 

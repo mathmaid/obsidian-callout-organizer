@@ -117,6 +117,10 @@ In the second case, the auto callout IDs will not function properly.
 
 You may have some callouts in code blocks somewhere. These callouts can also be found in the callout organizer. But when dragging it into the document, the callout will not be found since it is in the code block.
 
+### Missing Callouts
+
+Some old callouts created before using this plugin can not be searched in this plugin. You can solve this problem by changing the filename to ensure the plugin tracking your callouts.
+
 ## Settings
 
 ### Display Options
@@ -163,6 +167,15 @@ The inspiration of this color scheme comes from Zotero and Bilibili.
 MIT License - see LICENSE file for details
 
 ## Changelog
+
+### Version 1.1.1
+- 🐛 **Bug Fixes**:
+  - Fixed search functionality to properly detect callouts in all files
+  - Resolved issue where some callouts weren't found in search mode
+- ✨ **Improvements**:
+  - Search mode now always includes callouts from the current file
+  - Enhanced file processing reliability with better caching logic
+  - Improved search algorithm to ensure no files are skipped
 
 ### Version 1.1.0
 - 🎉 **New Feature**:

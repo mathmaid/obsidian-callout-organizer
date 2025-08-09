@@ -1512,20 +1512,30 @@ export default class CalloutOrganizerPlugin extends Plugin {
             return [];
         }
         
-        // Current file mode doesn't use folder filtering
-        
         return await this.extractCalloutsFromFile(activeFile);
     }
 
     async extractAllCallouts(): Promise<CalloutItem[]> {
         const callouts: CalloutItem[] = [];
         const files = this.app.vault.getMarkdownFiles();
+        const currentFile = this.app.workspace.getActiveFile();
+        const processedFiles = new Set<string>();
         
+        // Always process current file first to ensure it's included in search results
+        if (currentFile && currentFile.path.endsWith('.md')) {
+            const currentFileCallouts = await this.extractCalloutsFromFile(currentFile);
+            callouts.push(...currentFileCallouts);
+            processedFiles.add(currentFile.path);
+        }
+        
+        // Process all other files
         for (const file of files) {
-            if (this.shouldSkipFile(file.path, true)) continue;
+            // Skip if already processed (current file) or should be excluded
+            if (processedFiles.has(file.path) || this.shouldSkipFile(file.path, true)) continue;
             
             const fileCallouts = await this.extractCalloutsFromFile(file);
             callouts.push(...fileCallouts);
+            processedFiles.add(file.path);
         }
         
         return callouts;

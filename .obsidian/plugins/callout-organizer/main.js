@@ -1208,11 +1208,19 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
   async extractAllCallouts() {
     const callouts = [];
     const files = this.app.vault.getMarkdownFiles();
+    const currentFile = this.app.workspace.getActiveFile();
+    const processedFiles = /* @__PURE__ */ new Set();
+    if (currentFile && currentFile.path.endsWith(".md")) {
+      const currentFileCallouts = await this.extractCalloutsFromFile(currentFile);
+      callouts.push(...currentFileCallouts);
+      processedFiles.add(currentFile.path);
+    }
     for (const file of files) {
-      if (this.shouldSkipFile(file.path, true))
+      if (processedFiles.has(file.path) || this.shouldSkipFile(file.path, true))
         continue;
       const fileCallouts = await this.extractCalloutsFromFile(file);
       callouts.push(...fileCallouts);
+      processedFiles.add(file.path);
     }
     return callouts;
   }
