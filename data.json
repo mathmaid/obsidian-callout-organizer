@@ -1,0 +1,168 @@
+{
+  "excludedFolders": [],
+  "groupByType": false,
+  "searchInFilenames": true,
+  "searchInHeaders": true,
+  "searchInCalloutTitles": true,
+  "searchInCalloutIds": true,
+  "searchInCalloutContent": true,
+  "maxSearchResults": 50,
+  "showFilenames": true,
+  "showH1Headers": true,
+  "showH2Headers": true,
+  "showH3Headers": true,
+  "showH4Headers": true,
+  "showH5Headers": true,
+  "showH6Headers": true,
+  "showCalloutIds": true,
+  "calloutFontSize": 14,
+  "breadcrumbFontSize": 12,
+  "useEmbedLinks": true,
+  "invisibleEmbeddings": true,
+  "hideFileNamesInLinks": true,
+  "customCalloutCSS": "",
+  "calloutColors": {
+    "abstract": {
+      "color": "#00bfbc",
+      "icon": "clipboard-list"
+    },
+    "attention": {
+      "color": "#ec7500",
+      "icon": "alert-triangle"
+    },
+    "bug": {
+      "color": "#e93147",
+      "icon": "bug"
+    },
+    "caution": {
+      "color": "#ec7500",
+      "icon": "alert-triangle"
+    },
+    "check": {
+      "color": "#08b94e",
+      "icon": "check"
+    },
+    "cite": {
+      "color": "#9e9e9e",
+      "icon": "quote"
+    },
+    "danger": {
+      "color": "#e93147",
+      "icon": "zap"
+    },
+    "done": {
+      "color": "#08b94e",
+      "icon": "check"
+    },
+    "error": {
+      "color": "#e93147",
+      "icon": "zap"
+    },
+    "example": {
+      "color": "#7852ee",
+      "icon": "list"
+    },
+    "fail": {
+      "color": "#e93147",
+      "icon": "x"
+    },
+    "failure": {
+      "color": "#e93147",
+      "icon": "x"
+    },
+    "faq": {
+      "color": "#ec7500",
+      "icon": "help-circle"
+    },
+    "help": {
+      "color": "#ec7500",
+      "icon": "help-circle"
+    },
+    "hint": {
+      "color": "#00bfbc",
+      "icon": "flame"
+    },
+    "important": {
+      "color": "#00bfbc",
+      "icon": "flame"
+    },
+    "info": {
+      "color": "#086ddd",
+      "icon": "info"
+    },
+    "missing": {
+      "color": "#e93147",
+      "icon": "x"
+    },
+    "note": {
+      "color": "#086ddd",
+      "icon": "pencil"
+    },
+    "question": {
+      "color": "#ec7500",
+      "icon": "help-circle"
+    },
+    "quote": {
+      "color": "#9e9e9e",
+      "icon": "quote"
+    },
+    "success": {
+      "color": "#08b94e",
+      "icon": "check"
+    },
+    "summary": {
+      "color": "#00bfbc",
+      "icon": "clipboard-list"
+    },
+    "tip": {
+      "color": "#00bfbc",
+      "icon": "flame"
+    },
+    "tldr": {
+      "color": "#00bfbc",
+      "icon": "clipboard-list"
+    },
+    "todo": {
+      "color": "#086ddd",
+      "icon": "check-circle-2"
+    },
+    "warning": {
+      "color": "#ec7500",
+      "icon": "alert-triangle"
+    },
+    "corollary": {
+      "color": "#e56eee",
+      "icon": "none"
+    },
+    "definition": {
+      "color": "#2ea8e5",
+      "icon": "none"
+    },
+    "lemma": {
+      "color": "#f5ca00",
+      "icon": "none"
+    },
+    "proposition": {
+      "color": "#a28ae5",
+      "icon": "none"
+    },
+    "theorem": {
+      "color": "#f19837",
+      "icon": "none"
+    },
+    "conjecture": {
+      "color": "#ff6699",
+      "icon": "none"
+    },
+    "exercise": {
+      "color": "#5fb236",
+      "icon": "none"
+    },
+    "remark": {
+      "color": "#ff6666",
+      "icon": "none"
+    }
+  },
+  "showCurrentFileInSearch": true,
+  "showOutlinksInCurrentFile": true
+}
