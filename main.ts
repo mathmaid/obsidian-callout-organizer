@@ -101,6 +101,7 @@ class CalloutOrganizerView extends ItemView {
     // Debouncing and performance optimizations
     private refreshDebounceTimer: NodeJS.Timeout | null = null;
     private searchDebounceTimer: NodeJS.Timeout | null = null;
+    private cacheRefreshInProgress = false;
     private lastRenderTime: number = 0;
     private readonly DEBOUNCE_DELAY = 300;
     private readonly MAX_CACHE_SIZE = 1000; // Limit cache size
@@ -167,17 +168,25 @@ class CalloutOrganizerView extends ItemView {
         } else if (this.searchMode === 'search') {
             // Check if cache is still valid (5 minutes)
             const now = Date.now();
-            if (now - this.cacheTimestamp > 5 * 60 * 1000 || this.allCalloutsCache.length === 0) {
-                let allCallouts = await this.plugin.extractAllCallouts();
+            const cacheExpired = now - this.cacheTimestamp > 5 * 60 * 1000;
+            
+            if ((cacheExpired || this.allCalloutsCache.length === 0) && !this.cacheRefreshInProgress) {
+                this.cacheRefreshInProgress = true;
                 
-                // Cache management - limit size to prevent memory issues
-                if (allCallouts.length > this.MAX_CACHE_SIZE) {
-                    console.log(`Callout cache size (${allCallouts.length}) exceeds limit (${this.MAX_CACHE_SIZE}), truncating`);
-                    allCallouts = allCallouts.slice(0, this.MAX_CACHE_SIZE);
+                try {
+                    let allCallouts = await this.plugin.extractAllCallouts();
+                    
+                    // Cache management - limit size to prevent memory issues
+                    if (allCallouts.length > this.MAX_CACHE_SIZE) {
+                        console.log(`Callout cache size (${allCallouts.length}) exceeds limit (${this.MAX_CACHE_SIZE}), truncating`);
+                        allCallouts = allCallouts.slice(0, this.MAX_CACHE_SIZE);
+                    }
+                    
+                    this.allCalloutsCache = allCallouts;
+                    this.cacheTimestamp = now;
+                } finally {
+                    this.cacheRefreshInProgress = false;
                 }
-                
-                this.allCalloutsCache = allCallouts;
-                this.cacheTimestamp = now;
             }
             this.callouts = this.allCalloutsCache;
         }
@@ -824,7 +833,7 @@ class CalloutOrganizerView extends ItemView {
 
 
 
-    generateCalloutAlias(callout: CalloutItem, blockId: string): string {
+    generateCalloutAlias(_callout: CalloutItem, blockId: string): string {
         // Generate alias using only the callout ID
         // e.g., "theorem-def456", "note-abc123", "example-xyz789"
         return blockId;
@@ -851,6 +860,10 @@ class CalloutOrganizerView extends ItemView {
             }
 
             const content = await this.app.vault.read(file);
+            if (!content && content !== '') {
+                new Notice(`Failed to read file: ${callout.file}`);
+                return;
+            }
             const lines = content.split('\n');
             
             // Find the callout starting from the callout header line
@@ -982,7 +995,7 @@ class CalloutOrganizerView extends ItemView {
             if (newTab) {
                 leaf = this.app.workspace.getLeaf('tab');
             } else {
-                leaf = this.app.workspace.getUnpinnedLeaf();
+                leaf = this.app.workspace.getLeaf(false);
             }
             await leaf.openFile(file);
             
@@ -1040,18 +1053,20 @@ class CalloutOrganizerView extends ItemView {
                 document.head.appendChild(style);
             }
             
-            // Position the highlight
-            const lineEl = editor.display.lineDiv.children[lineNumber];
-            if (lineEl) {
-                lineEl.style.position = 'relative';
-                lineEl.appendChild(markEl);
-                
-                // Remove after animation
-                setTimeout(() => {
-                    if (markEl && markEl.parentNode) {
-                        markEl.parentNode.removeChild(markEl);
-                    }
-                }, 3000);
+            // Position the highlight with better error handling
+            if (editor.display && editor.display.lineDiv && editor.display.lineDiv.children) {
+                const lineEl = editor.display.lineDiv.children[lineNumber];
+                if (lineEl && markEl) {
+                    lineEl.style.position = 'relative';
+                    lineEl.appendChild(markEl);
+                    
+                    // Remove after animation
+                    setTimeout(() => {
+                        if (markEl && markEl.parentNode) {
+                            markEl.parentNode.removeChild(markEl);
+                        }
+                    }, 3000);
+                }
             }
         } catch (error) {
             console.warn('Failed to highlight line:', error);
@@ -1136,15 +1151,23 @@ class CalloutOrganizerView extends ItemView {
             this.searchDebounceTimer = null;
         }
         
+        // Clear DOM element references (event listeners are automatically cleaned up when elements are removed)
+        if (this.topBarElement) {
+            this.topBarElement = null;
+        }
+        if (this.calloutContainerElement) {
+            this.calloutContainerElement = null;
+        }
+        
         // Comprehensive cleanup to free memory
         this.allCalloutsCache = [];
         this.callouts = [];
         this.activeFilters.clear();
         this.cacheTimestamp = 0;
-        this.topBarElement = null;
-        this.calloutContainerElement = null;
+        this.cacheRefreshInProgress = false;
         
-        this.component.unload();
+        // Clean up component
+        this.component?.unload();
     }
 }
 
@@ -1243,12 +1266,28 @@ export default class CalloutOrganizerPlugin extends Plugin {
         for (const file of files) {
             if (this.shouldSkipFile(file.path, true)) continue;
             
-            const content = await this.app.vault.read(file);
-            let match;
-            
-            while ((match = calloutRegex.exec(content)) !== null) {
-                const type = match[1].toLowerCase().trim();
-                calloutTypes.add(type);
+            try {
+                const content = await this.app.vault.read(file);
+                let match;
+                let iterations = 0;
+                const MAX_ITERATIONS = 1000; // Prevent infinite loops
+                
+                // Reset regex lastIndex to prevent issues
+                calloutRegex.lastIndex = 0;
+                
+                while ((match = calloutRegex.exec(content)) !== null && iterations < MAX_ITERATIONS) {
+                    const type = match[1].toLowerCase().trim();
+                    calloutTypes.add(type);
+                    iterations++;
+                    
+                    // Additional safety check for zero-width matches
+                    if (match.index === calloutRegex.lastIndex) {
+                        calloutRegex.lastIndex++;
+                    }
+                }
+            } catch (error) {
+                console.warn(`Failed to read file ${file.path} for callout scanning:`, error);
+                continue;
             }
         }
         

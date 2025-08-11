@@ -74,6 +74,7 @@ var CalloutOrganizerView = class extends import_obsidian.ItemView {
     // Debouncing and performance optimizations
     this.refreshDebounceTimer = null;
     this.searchDebounceTimer = null;
+    this.cacheRefreshInProgress = false;
     this.lastRenderTime = 0;
     this.DEBOUNCE_DELAY = 300;
     this.MAX_CACHE_SIZE = 1e3;
@@ -124,14 +125,20 @@ var CalloutOrganizerView = class extends import_obsidian.ItemView {
       this.callouts = await this.plugin.extractCurrentFileCallouts();
     } else if (this.searchMode === "search") {
       const now = Date.now();
-      if (now - this.cacheTimestamp > 5 * 60 * 1e3 || this.allCalloutsCache.length === 0) {
-        let allCallouts = await this.plugin.extractAllCallouts();
-        if (allCallouts.length > this.MAX_CACHE_SIZE) {
-          console.log(`Callout cache size (${allCallouts.length}) exceeds limit (${this.MAX_CACHE_SIZE}), truncating`);
-          allCallouts = allCallouts.slice(0, this.MAX_CACHE_SIZE);
+      const cacheExpired = now - this.cacheTimestamp > 5 * 60 * 1e3;
+      if ((cacheExpired || this.allCalloutsCache.length === 0) && !this.cacheRefreshInProgress) {
+        this.cacheRefreshInProgress = true;
+        try {
+          let allCallouts = await this.plugin.extractAllCallouts();
+          if (allCallouts.length > this.MAX_CACHE_SIZE) {
+            console.log(`Callout cache size (${allCallouts.length}) exceeds limit (${this.MAX_CACHE_SIZE}), truncating`);
+            allCallouts = allCallouts.slice(0, this.MAX_CACHE_SIZE);
+          }
+          this.allCalloutsCache = allCallouts;
+          this.cacheTimestamp = now;
+        } finally {
+          this.cacheRefreshInProgress = false;
         }
-        this.allCalloutsCache = allCallouts;
-        this.cacheTimestamp = now;
       }
       this.callouts = this.allCalloutsCache;
     }
@@ -607,7 +614,7 @@ var CalloutOrganizerView = class extends import_obsidian.ItemView {
     });
     return grouped;
   }
-  generateCalloutAlias(callout, blockId) {
+  generateCalloutAlias(_callout, blockId) {
     return blockId;
   }
   generateCalloutId(callout) {
@@ -627,6 +634,10 @@ var CalloutOrganizerView = class extends import_obsidian.ItemView {
         return;
       }
       const content = await this.app.vault.read(file);
+      if (!content && content !== "") {
+        new import_obsidian.Notice(`Failed to read file: ${callout.file}`);
+        return;
+      }
       const lines = content.split("\n");
       let lastCalloutLineIndex = -1;
       let actualStartLine = -1;
@@ -712,7 +723,7 @@ var CalloutOrganizerView = class extends import_obsidian.ItemView {
       if (newTab) {
         leaf = this.app.workspace.getLeaf("tab");
       } else {
-        leaf = this.app.workspace.getUnpinnedLeaf();
+        leaf = this.app.workspace.getLeaf(false);
       }
       await leaf.openFile(file);
       if (lineNumber) {
@@ -762,15 +773,17 @@ var CalloutOrganizerView = class extends import_obsidian.ItemView {
                 `;
         document.head.appendChild(style);
       }
-      const lineEl = editor.display.lineDiv.children[lineNumber];
-      if (lineEl) {
-        lineEl.style.position = "relative";
-        lineEl.appendChild(markEl);
-        setTimeout(() => {
-          if (markEl && markEl.parentNode) {
-            markEl.parentNode.removeChild(markEl);
-          }
-        }, 3e3);
+      if (editor.display && editor.display.lineDiv && editor.display.lineDiv.children) {
+        const lineEl = editor.display.lineDiv.children[lineNumber];
+        if (lineEl && markEl) {
+          lineEl.style.position = "relative";
+          lineEl.appendChild(markEl);
+          setTimeout(() => {
+            if (markEl && markEl.parentNode) {
+              markEl.parentNode.removeChild(markEl);
+            }
+          }, 3e3);
+        }
       }
     } catch (error) {
       console.warn("Failed to highlight line:", error);
@@ -831,6 +844,7 @@ var CalloutOrganizerView = class extends import_obsidian.ItemView {
     }
   }
   async onClose() {
+    var _a;
     if (this.refreshDebounceTimer) {
       clearTimeout(this.refreshDebounceTimer);
       this.refreshDebounceTimer = null;
@@ -839,13 +853,18 @@ var CalloutOrganizerView = class extends import_obsidian.ItemView {
       clearTimeout(this.searchDebounceTimer);
       this.searchDebounceTimer = null;
     }
+    if (this.topBarElement) {
+      this.topBarElement = null;
+    }
+    if (this.calloutContainerElement) {
+      this.calloutContainerElement = null;
+    }
     this.allCalloutsCache = [];
     this.callouts = [];
     this.activeFilters.clear();
     this.cacheTimestamp = 0;
-    this.topBarElement = null;
-    this.calloutContainerElement = null;
-    this.component.unload();
+    this.cacheRefreshInProgress = false;
+    (_a = this.component) == null ? void 0 : _a.unload();
   }
 };
 var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
@@ -919,11 +938,23 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
     for (const file of files) {
       if (this.shouldSkipFile(file.path, true))
         continue;
-      const content = await this.app.vault.read(file);
-      let match;
-      while ((match = calloutRegex.exec(content)) !== null) {
-        const type = match[1].toLowerCase().trim();
-        calloutTypes.add(type);
+      try {
+        const content = await this.app.vault.read(file);
+        let match;
+        let iterations = 0;
+        const MAX_ITERATIONS = 1e3;
+        calloutRegex.lastIndex = 0;
+        while ((match = calloutRegex.exec(content)) !== null && iterations < MAX_ITERATIONS) {
+          const type = match[1].toLowerCase().trim();
+          calloutTypes.add(type);
+          iterations++;
+          if (match.index === calloutRegex.lastIndex) {
+            calloutRegex.lastIndex++;
+          }
+        }
+      } catch (error) {
+        console.warn(`Failed to read file ${file.path} for callout scanning:`, error);
+        continue;
       }
     }
     return calloutTypes;
