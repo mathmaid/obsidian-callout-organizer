@@ -7,6 +7,7 @@
   "searchInCalloutContent": true,
   "maxSearchResults": 50,
   "enableFileCache": true,
+  "canvasStorageFolder": "Callout Connections",
   "showFilenames": true,
   "showH1Headers": true,
   "showH2Headers": true,

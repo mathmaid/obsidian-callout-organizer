@@ -40,6 +40,8 @@ var DEFAULT_SETTINGS = {
   maxSearchResults: 50,
   // Cache settings
   enableFileCache: true,
+  // Canvas settings
+  canvasStorageFolder: "Callout Connections",
   // Display options - show all by default
   showFilenames: true,
   showH1Headers: true,
@@ -522,6 +524,20 @@ var CalloutOrganizerView = class extends import_obsidian.ItemView {
           linkText = useEmbed ? `![[${filename}#^${calloutID}]]` : `[[${filename}#^${calloutID}]]`;
         }
         e.dataTransfer.setData("text/plain", linkText);
+        const obsidianFile = this.plugin.app.vault.getAbstractFileByPath(callout.file);
+        if (obsidianFile) {
+          e.dataTransfer.setData("text/x-obsidian-file", JSON.stringify({
+            file: callout.file,
+            subpath: `#^${calloutID}`,
+            type: "block"
+          }));
+        }
+        const suggestedNodeProps = {
+          id: `${filename}.md#^${calloutID}`,
+          text: linkText,
+          type: "text"
+        };
+        e.dataTransfer.setData("text/canvas-node-props", JSON.stringify(suggestedNodeProps));
         e.dataTransfer.effectAllowed = "copy";
         calloutEl.style.opacity = "0.5";
         if (needsNewId && calloutID) {
@@ -903,6 +919,7 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
       VIEW_TYPE_CALLOUT_ORGANIZER,
       (leaf) => new CalloutOrganizerView(leaf, this, "current")
     );
+    this.registerDomEvent(document, "drop", this.handleCanvasDrop.bind(this), true);
     this.addRibbonIcon("album", "Open Callout Organizer", () => {
       this.activateCalloutOrganizer();
     });
@@ -911,6 +928,13 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
       name: "Open Callout Organizer",
       callback: () => {
         this.activateCalloutOrganizer();
+      }
+    });
+    this.addCommand({
+      id: "open-callout-graphview",
+      name: "Open Callout Graphview",
+      callback: () => {
+        this.openCalloutGraphview();
       }
     });
     this.addSettingTab(new CalloutOrganizerSettingTab(this.app, this));
@@ -1264,6 +1288,449 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
       this.app.workspace.revealLeaf(leaves[0]);
     }
   }
+  async openCalloutGraphview() {
+    try {
+      const cache = await this.loadCalloutCache();
+      const callouts = (cache == null ? void 0 : cache.callouts) || [];
+      if (callouts.length === 0) {
+        new import_obsidian.Notice("No callouts found in the vault.");
+        return;
+      }
+      const calloutsWithID = callouts.filter((callout) => callout.calloutID);
+      if (calloutsWithID.length === 0) {
+        new import_obsidian.Notice("No callouts with IDs found. Only callouts with calloutID can open graph view.");
+        return;
+      }
+      const modal = new CalloutSelectorModal(this.app, calloutsWithID, async (selectedCallout) => {
+        await this.createCalloutGraphCanvas(selectedCallout);
+      });
+      modal.open();
+    } catch (error) {
+      console.error("Error opening callout graphview:", error);
+      new import_obsidian.Notice("Error opening callout graphview. Check console for details.");
+    }
+  }
+  async createCalloutGraphCanvas(selectedCallout) {
+    var _a, _b;
+    try {
+      const sourceFilename = ((_b = (_a = selectedCallout.file) == null ? void 0 : _a.split("/").pop()) == null ? void 0 : _b.replace(".md", "")) || "unknown";
+      const canvasFileName = `callout-${sourceFilename}-${selectedCallout.calloutID || Date.now()}.canvas`;
+      const canvasPath = `${this.settings.canvasStorageFolder}/${canvasFileName}`;
+      const canvasFolder = this.app.vault.getAbstractFileByPath(this.settings.canvasStorageFolder);
+      if (!canvasFolder) {
+        await this.app.vault.createFolder(this.settings.canvasStorageFolder);
+      }
+      const canvasData = {
+        nodes: [
+          {
+            id: `${selectedCallout.file}#^${selectedCallout.calloutID}`,
+            type: "text",
+            text: `![[${selectedCallout.file}#^${selectedCallout.calloutID}]]`,
+            x: 0,
+            y: 0,
+            width: 400,
+            height: 200,
+            color: this.getCanvasColorForCallout(selectedCallout.type)
+          }
+        ],
+        edges: []
+      };
+      const relatedCallouts = await this.getRelatedCallouts(selectedCallout);
+      const mainCalloutId = `${selectedCallout.file}#^${selectedCallout.calloutID}`;
+      const inlinksCallouts = [];
+      const outlinksCallouts = [];
+      const bidirectionalCallouts = [];
+      relatedCallouts.forEach((callout) => {
+        var _a2, _b2;
+        const isInlink = (_a2 = selectedCallout.inlinks) == null ? void 0 : _a2.some(
+          ([file, id]) => file === callout.file && id === callout.calloutID
+        );
+        const isOutlink = (_b2 = selectedCallout.outlinks) == null ? void 0 : _b2.some(
+          ([file, id]) => file === callout.file && id === callout.calloutID
+        );
+        if (isInlink && isOutlink) {
+          bidirectionalCallouts.push(callout);
+        } else if (isInlink) {
+          inlinksCallouts.push(callout);
+        } else if (isOutlink) {
+          outlinksCallouts.push(callout);
+        }
+      });
+      inlinksCallouts.forEach((callout, index) => {
+        const y = (index - (inlinksCallouts.length - 1) / 2) * 200;
+        const calloutId = `${callout.file}#^${callout.calloutID}`;
+        canvasData.nodes.push({
+          id: calloutId,
+          type: "text",
+          text: `![[${callout.file}#^${callout.calloutID}]]`,
+          x: -600,
+          y,
+          width: 350,
+          height: 150,
+          color: this.getCanvasColorForCallout(callout.type)
+        });
+        canvasData.edges.push({
+          id: `edge-${calloutId}-to-main`,
+          fromNode: calloutId,
+          fromSide: "right",
+          toNode: mainCalloutId,
+          toSide: "left"
+        });
+      });
+      outlinksCallouts.forEach((callout, index) => {
+        const y = (index - (outlinksCallouts.length - 1) / 2) * 200;
+        const calloutId = `${callout.file}#^${callout.calloutID}`;
+        canvasData.nodes.push({
+          id: calloutId,
+          type: "text",
+          text: `![[${callout.file}#^${callout.calloutID}]]`,
+          x: 600,
+          y,
+          width: 350,
+          height: 150,
+          color: this.getCanvasColorForCallout(callout.type)
+        });
+        canvasData.edges.push({
+          id: `edge-main-to-${calloutId}`,
+          fromNode: mainCalloutId,
+          fromSide: "right",
+          toNode: calloutId,
+          toSide: "left"
+        });
+      });
+      if (bidirectionalCallouts.length > 0) {
+        if (bidirectionalCallouts.length === 1) {
+          canvasData.nodes[0].y = -150;
+          const callout = bidirectionalCallouts[0];
+          const calloutId = `${callout.file}#^${callout.calloutID}`;
+          canvasData.nodes.push({
+            id: calloutId,
+            type: "text",
+            text: `![[${callout.file}#^${callout.calloutID}]]`,
+            x: 0,
+            y: 150,
+            // 双向节点在下
+            width: 350,
+            height: 150,
+            color: this.getCanvasColorForCallout(callout.type)
+          });
+          canvasData.edges.push({
+            id: `edge-main-to-${calloutId}`,
+            fromNode: mainCalloutId,
+            fromSide: "bottom",
+            toNode: calloutId,
+            toSide: "top"
+          });
+          canvasData.edges.push({
+            id: `edge-${calloutId}-to-main`,
+            fromNode: calloutId,
+            fromSide: "top",
+            toNode: mainCalloutId,
+            toSide: "bottom"
+          });
+        } else {
+          const totalHeight = bidirectionalCallouts.length * 200;
+          const startY = -totalHeight / 2 + 100;
+          bidirectionalCallouts.forEach((callout, index) => {
+            const y = startY + index * 200;
+            const calloutId = `${callout.file}#^${callout.calloutID}`;
+            canvasData.nodes.push({
+              id: calloutId,
+              type: "text",
+              text: `![[${callout.file}#^${callout.calloutID}]]`,
+              x: 0,
+              y,
+              width: 350,
+              height: 150,
+              color: this.getCanvasColorForCallout(callout.type)
+            });
+            canvasData.edges.push({
+              id: `edge-main-to-${calloutId}`,
+              fromNode: mainCalloutId,
+              fromSide: y < 0 ? "top" : "bottom",
+              toNode: calloutId,
+              toSide: y < 0 ? "bottom" : "top"
+            });
+            canvasData.edges.push({
+              id: `edge-${calloutId}-to-main`,
+              fromNode: calloutId,
+              fromSide: y < 0 ? "bottom" : "top",
+              toNode: mainCalloutId,
+              toSide: y < 0 ? "top" : "bottom"
+            });
+          });
+        }
+      }
+      try {
+        let canvasFile = this.app.vault.getAbstractFileByPath(canvasPath);
+        if (canvasFile) {
+          await this.app.vault.delete(canvasFile);
+          console.log(`Deleted existing canvas file: ${canvasPath}`);
+        }
+        canvasFile = await this.app.vault.create(canvasPath, JSON.stringify(canvasData, null, 2));
+        if (canvasFile) {
+          const leaf = this.app.workspace.getUnpinnedLeaf();
+          await leaf.openFile(canvasFile);
+          new import_obsidian.Notice(`Regenerated and opened canvas for callout: ${selectedCallout.title}`);
+        } else {
+          new import_obsidian.Notice("Canvas created but could not be opened automatically.");
+        }
+      } catch (error) {
+        console.error("Error regenerating canvas:", error);
+        new import_obsidian.Notice("Error regenerating canvas. Check console for details.");
+      }
+    } catch (error) {
+      console.error("Error creating canvas:", error);
+      new import_obsidian.Notice("Error creating canvas. Check console for details.");
+    }
+  }
+  async getRelatedCallouts(selectedCallout) {
+    const cache = await this.loadCalloutCache();
+    const allCallouts = (cache == null ? void 0 : cache.callouts) || [];
+    const calloutMap = /* @__PURE__ */ new Map();
+    allCallouts.forEach((callout) => {
+      if (callout.calloutID) {
+        const key = `${callout.file}:${callout.calloutID}`;
+        calloutMap.set(key, callout);
+      }
+    });
+    const relatedCallouts = [];
+    const addedCalloutKeys = /* @__PURE__ */ new Set();
+    if (selectedCallout.inlinks) {
+      selectedCallout.inlinks.forEach(([filename, calloutID]) => {
+        const key = `${filename}:${calloutID}`;
+        const callout = calloutMap.get(key);
+        if (callout && !addedCalloutKeys.has(key)) {
+          relatedCallouts.push(callout);
+          addedCalloutKeys.add(key);
+        }
+      });
+    }
+    if (selectedCallout.outlinks) {
+      selectedCallout.outlinks.forEach(([filename, calloutID]) => {
+        const key = `${filename}:${calloutID}`;
+        const callout = calloutMap.get(key);
+        if (callout && !addedCalloutKeys.has(key)) {
+          relatedCallouts.push(callout);
+          addedCalloutKeys.add(key);
+        }
+      });
+    }
+    return relatedCallouts;
+  }
+  /**
+   * 根据callout类型获取对应的canvas颜色
+   */
+  getCanvasColorForCallout(calloutType) {
+    var _a;
+    const calloutColor = (_a = this.settings.calloutColors[calloutType]) == null ? void 0 : _a.color;
+    if (!calloutColor) {
+      return "1";
+    }
+    const colorMap = {
+      "#086ddd": "1",
+      // 蓝色 - note, info等
+      "#08b94e": "2",
+      // 绿色 - success, check等  
+      "#ec7500": "3",
+      // 橙色 - warning, attention等
+      "#e93147": "4",
+      // 红色 - error, danger等
+      "#7852ee": "5",
+      // 紫色 - example等
+      "#00bfbc": "6"
+      // 青色 - tip, important等
+    };
+    if (colorMap[calloutColor.toLowerCase()]) {
+      return colorMap[calloutColor.toLowerCase()];
+    }
+    const color = calloutColor.toLowerCase();
+    if (color.includes("086d") || color.includes("2ea8"))
+      return "1";
+    if (color.includes("08b9") || color.includes("5fb2"))
+      return "2";
+    if (color.includes("ec75") || color.includes("f5ca") || color.includes("f198"))
+      return "3";
+    if (color.includes("e931") || color.includes("ff66"))
+      return "4";
+    if (color.includes("785") || color.includes("e56e") || color.includes("a28a") || color.includes("ff66"))
+      return "5";
+    if (color.includes("00bf") || color.includes("9e9e"))
+      return "6";
+    return "1";
+  }
+  /**
+   * 分析canvas文件中的链接关系，更新callout的inlinks和outlinks
+   */
+  async analyzeCanvasLinks(callouts) {
+    try {
+      const updatedCallouts = callouts.map((callout) => ({
+        ...callout,
+        inlinks: [],
+        outlinks: []
+      }));
+      const calloutMap = /* @__PURE__ */ new Map();
+      updatedCallouts.forEach((callout) => {
+        if (callout.calloutID) {
+          const key = `${callout.file}:${callout.calloutID}`;
+          calloutMap.set(key, callout);
+        }
+      });
+      const canvasFolder = this.app.vault.getAbstractFileByPath(this.settings.canvasStorageFolder);
+      if (!canvasFolder || !(canvasFolder instanceof import_obsidian.TFolder)) {
+        console.log("Canvas folder not found, skipping link analysis");
+        return updatedCallouts;
+      }
+      const canvasFiles = canvasFolder.children.filter(
+        (file) => file instanceof import_obsidian.TFile && file.extension === "canvas"
+      );
+      for (const canvasFile of canvasFiles) {
+        try {
+          const canvasContent = await this.app.vault.read(canvasFile);
+          const canvasData = JSON.parse(canvasContent);
+          if (canvasData.edges && Array.isArray(canvasData.edges) && canvasData.nodes && Array.isArray(canvasData.nodes)) {
+            const nodeIdToCallout = /* @__PURE__ */ new Map();
+            canvasData.nodes.forEach((node) => {
+              if (node.type === "text") {
+                const nodeIdMatch = node.id.match(/^([^#]+)#\^(.+)$/);
+                if (nodeIdMatch) {
+                  const filename = nodeIdMatch[1];
+                  const calloutID = nodeIdMatch[2];
+                  nodeIdToCallout.set(node.id, [filename, calloutID]);
+                } else if (node.text) {
+                  const embedMatch = node.text.match(/!\[\[([^#\]]+)#\^([^\]]+)\]\]/);
+                  if (embedMatch) {
+                    const filename = embedMatch[1];
+                    const calloutID = embedMatch[2];
+                    nodeIdToCallout.set(node.id, [filename, calloutID]);
+                  }
+                }
+              }
+            });
+            console.log(`Processing ${canvasData.edges.length} edges in canvas ${canvasFile.path}`);
+            canvasData.edges.forEach((edge, edgeIndex) => {
+              const fromNodeId = edge.fromNode;
+              const toNodeId = edge.toNode;
+              console.log(`Edge ${edgeIndex + 1}: ${fromNodeId} -> ${toNodeId}`);
+              const fromCalloutInfo = nodeIdToCallout.get(fromNodeId);
+              const toCalloutInfo = nodeIdToCallout.get(toNodeId);
+              if (fromCalloutInfo && toCalloutInfo) {
+                const [fromFile, fromCalloutID] = fromCalloutInfo;
+                const [toFile, toCalloutID] = toCalloutInfo;
+                console.log(`  Mapping: [${fromFile}:${fromCalloutID}] -> [${toFile}:${toCalloutID}]`);
+                const fromKey = `${fromFile}:${fromCalloutID}`;
+                const toKey = `${toFile}:${toCalloutID}`;
+                const fromCallout = calloutMap.get(fromKey);
+                const toCallout = calloutMap.get(toKey);
+                if (fromCallout && toCallout) {
+                  fromCallout.outlinks = fromCallout.outlinks || [];
+                  const outLinkExists = fromCallout.outlinks.some(([file, id]) => file === toFile && id === toCalloutID);
+                  if (!outLinkExists) {
+                    fromCallout.outlinks.push([toFile, toCalloutID]);
+                    console.log(`  Added outlink: ${fromFile}:${fromCalloutID} -> ${toFile}:${toCalloutID}`);
+                  } else {
+                    console.log(`  Outlink already exists: ${fromFile}:${fromCalloutID} -> ${toFile}:${toCalloutID}`);
+                  }
+                  toCallout.inlinks = toCallout.inlinks || [];
+                  const inLinkExists = toCallout.inlinks.some(([file, id]) => file === fromFile && id === fromCalloutID);
+                  if (!inLinkExists) {
+                    toCallout.inlinks.push([fromFile, fromCalloutID]);
+                    console.log(`  Added inlink: ${toFile}:${toCalloutID} <- ${fromFile}:${fromCalloutID}`);
+                  } else {
+                    console.log(`  Inlink already exists: ${toFile}:${toCalloutID} <- ${fromFile}:${fromCalloutID}`);
+                  }
+                } else {
+                  console.log(`  Could not find callouts in map: from=${!!fromCallout}, to=${!!toCallout}`);
+                }
+              } else {
+                console.log(`  Could not resolve node IDs: from=${!!fromCalloutInfo}, to=${!!toCalloutInfo}`);
+              }
+            });
+          }
+        } catch (error) {
+          console.warn(`Failed to analyze canvas file ${canvasFile.path}:`, error);
+        }
+      }
+      console.log("Final link analysis results:");
+      updatedCallouts.forEach((callout) => {
+        if (callout.inlinks && callout.inlinks.length > 0 || callout.outlinks && callout.outlinks.length > 0) {
+          console.log(`${callout.file}#^${callout.calloutID}:`);
+          if (callout.inlinks && callout.inlinks.length > 0) {
+            console.log(`  inlinks: ${callout.inlinks.map(([f, id]) => `${f}#^${id}`).join(", ")}`);
+          }
+          if (callout.outlinks && callout.outlinks.length > 0) {
+            console.log(`  outlinks: ${callout.outlinks.map(([f, id]) => `${f}#^${id}`).join(", ")}`);
+          }
+        }
+      });
+      return updatedCallouts;
+    } catch (error) {
+      console.error("Error analyzing canvas links:", error);
+      return callouts;
+    }
+  }
+  /**
+   * Handle canvas drop events to fix node IDs for callout nodes
+   */
+  handleCanvasDrop(event) {
+    const target = event.target;
+    const canvasEl = target.closest('.canvas-node-container, .canvas-wrapper, .view-content[data-type="canvas"]');
+    if (!canvasEl || !event.dataTransfer)
+      return;
+    const canvasNodeProps = event.dataTransfer.getData("text/canvas-node-props");
+    if (canvasNodeProps) {
+      try {
+        const props = JSON.parse(canvasNodeProps);
+        setTimeout(() => {
+          this.fixCanvasNodeId(canvasEl, props);
+        }, 100);
+      } catch (error) {
+        console.error("Error parsing canvas node props:", error);
+      }
+    }
+  }
+  /**
+   * Fix the canvas node ID after it's been created
+   */
+  async fixCanvasNodeId(canvasEl, nodeProps) {
+    try {
+      const activeLeaf = this.app.workspace.activeLeaf;
+      if (activeLeaf && activeLeaf.view && activeLeaf.view.getViewType() === "canvas") {
+        const canvasView = activeLeaf.view;
+        const canvas = canvasView.canvas;
+        if (!canvas || !canvas.nodes)
+          return;
+        if (canvas.nodes.has(nodeProps.id)) {
+          console.log(`Node with ID ${nodeProps.id} already exists, skipping`);
+          return;
+        }
+        let targetNode = null;
+        let oldNodeId = null;
+        for (const [nodeId, node] of canvas.nodes) {
+          if (node.text === nodeProps.text && nodeId !== nodeProps.id) {
+            targetNode = node;
+            oldNodeId = nodeId;
+            break;
+          }
+        }
+        if (targetNode && oldNodeId && nodeProps.id) {
+          console.log(`Updating canvas node ID from ${oldNodeId} to ${nodeProps.id}`);
+          const originalId = targetNode.id;
+          targetNode.id = nodeProps.id;
+          canvas.nodes.delete(originalId);
+          canvas.nodes.set(nodeProps.id, targetNode);
+          if (canvas.requestSave) {
+            canvas.requestSave();
+          }
+          if (canvas.markDirty) {
+            canvas.markDirty();
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Error fixing canvas node ID:", error);
+    }
+  }
   getCalloutView() {
     const leaves = this.app.workspace.getLeavesOfType(VIEW_TYPE_CALLOUT_ORGANIZER);
     if (leaves.length > 0) {
@@ -1334,11 +1801,13 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
   async refreshAllCallouts() {
     console.log("Refreshing callouts - rescanning all files...");
     const callouts = await this.scanAllCallouts();
+    console.log("Analyzing canvas connections...");
+    const calloutsWithLinks = await this.analyzeCanvasLinks(callouts);
     if (this.settings.enableFileCache) {
-      await this.saveCalloutCache(callouts);
-      console.log(`Updated cache with ${callouts.length} callouts`);
+      await this.saveCalloutCache(calloutsWithLinks);
+      console.log(`Updated cache with ${calloutsWithLinks.length} callouts and their connections`);
     }
-    return callouts;
+    return calloutsWithLinks;
   }
   shouldSkipFile(filePath, searchMode = false) {
     if (!searchMode)
@@ -1723,6 +2192,12 @@ var CalloutOrganizerSettingTab = class extends import_obsidian.PluginSettingTab 
           console.warn("Failed to delete cache file:", error);
         }
       }
+    }));
+    containerEl.createEl("h3", { text: "Canvas Options" });
+    const canvasContainer = containerEl.createEl("div", { cls: "callout-settings-indent" });
+    new import_obsidian.Setting(canvasContainer).setName("Canvas Storage Folder").setDesc("Folder where callout canvas files will be stored (relative to vault root)").addText((text) => text.setPlaceholder("Callout Connections").setValue(this.plugin.settings.canvasStorageFolder).onChange(async (value) => {
+      this.plugin.settings.canvasStorageFolder = value || "Callout Connections";
+      await this.plugin.saveSettings();
     }));
     containerEl.createEl("h3", { text: "Display Options" });
     const displayContainer = containerEl.createEl("div", { cls: "callout-settings-indent" });
@@ -2243,5 +2718,92 @@ var CalloutOrganizerSettingTab = class extends import_obsidian.PluginSettingTab 
   }
   getDefaultIconForCalloutType(type) {
     return this.plugin.getDefaultIconForCalloutType(type);
+  }
+};
+var CalloutSelectorModal = class extends import_obsidian.Modal {
+  constructor(app, callouts, onSelect) {
+    super(app);
+    this.callouts = callouts;
+    this.filteredCallouts = [...callouts];
+    this.onSelect = onSelect;
+  }
+  onOpen() {
+    const { contentEl } = this;
+    contentEl.empty();
+    contentEl.createEl("h2", { text: "Select a Callout for Graph View" });
+    const searchContainer = contentEl.createDiv("callout-selector-search");
+    this.searchInput = searchContainer.createEl("input", {
+      type: "text",
+      placeholder: "Search callouts by title, type, or content..."
+    });
+    this.searchInput.addEventListener("input", () => this.filterCallouts());
+    this.resultContainer = contentEl.createDiv("callout-selector-results");
+    this.renderResults();
+    this.searchInput.focus();
+  }
+  filterCallouts() {
+    const query = this.searchInput.value.toLowerCase();
+    if (!query) {
+      this.filteredCallouts = [...this.callouts];
+    } else {
+      this.filteredCallouts = this.callouts.filter(
+        (callout) => callout.title.toLowerCase().includes(query) || callout.type.toLowerCase().includes(query) || callout.content.toLowerCase().includes(query) || callout.file.toLowerCase().includes(query)
+      );
+    }
+    this.renderResults();
+  }
+  renderResults() {
+    this.resultContainer.empty();
+    if (this.filteredCallouts.length === 0) {
+      this.resultContainer.createEl("p", {
+        text: "No callouts found matching your search.",
+        cls: "callout-selector-no-results"
+      });
+      return;
+    }
+    const maxResults = 50;
+    const calloutsToShow = this.filteredCallouts.slice(0, maxResults);
+    calloutsToShow.forEach((callout) => {
+      const item = this.resultContainer.createDiv("callout-selector-item");
+      const typeTag = item.createEl("span", {
+        text: callout.type,
+        cls: "callout-selector-type-tag"
+      });
+      const title = item.createEl("div", {
+        text: callout.title || "Untitled",
+        cls: "callout-selector-title"
+      });
+      const fileInfo = item.createEl("div", {
+        text: `\u{1F4C4} ${callout.file}`,
+        cls: "callout-selector-file"
+      });
+      if (callout.content) {
+        const preview = item.createEl("div", {
+          text: callout.content.slice(0, 100) + (callout.content.length > 100 ? "..." : ""),
+          cls: "callout-selector-preview"
+        });
+      }
+      item.addEventListener("click", async () => {
+        this.close();
+        await this.onSelect(callout);
+      });
+      item.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          item.click();
+        }
+      });
+      item.tabIndex = 0;
+    });
+    if (this.filteredCallouts.length > maxResults) {
+      this.resultContainer.createEl("p", {
+        text: `Showing first ${maxResults} of ${this.filteredCallouts.length} results. Use search to narrow down.`,
+        cls: "callout-selector-more-results"
+      });
+    }
+  }
+  onClose() {
+    const { contentEl } = this;
+    contentEl.empty();
   }
 };

@@ -1,4 +1,4 @@
-import { App, Plugin, PluginSettingTab, Setting, TFile, Modal, WorkspaceLeaf, ItemView, Notice, MarkdownRenderer, Component, setIcon, MarkdownView } from 'obsidian';
+import { App, Plugin, PluginSettingTab, Setting, TFile, TFolder, Modal, WorkspaceLeaf, ItemView, Notice, MarkdownRenderer, Component, setIcon, MarkdownView } from 'obsidian';
 
 // Constants for consistent icon rendering
 const OBSIDIAN_NOTE_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="svg-icon lucide-pencil"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"></path><path d="m15 5 4 4"></path></svg>`;
@@ -27,6 +27,8 @@ interface CalloutOrganizerSettings {
     maxSearchResults: number;
     // Cache settings
     enableFileCache: boolean;
+    // Canvas settings
+    canvasStorageFolder: string;
     // Display options
     showFilenames: boolean;
     showH1Headers: boolean;
@@ -58,6 +60,8 @@ const DEFAULT_SETTINGS: CalloutOrganizerSettings = {
     maxSearchResults: 50,
     // Cache settings
     enableFileCache: true,
+    // Canvas settings
+    canvasStorageFolder: 'Callout Connections',
     // Display options - show all by default
     showFilenames: true,
     showH1Headers: true,
@@ -79,6 +83,14 @@ const DEFAULT_SETTINGS: CalloutOrganizerSettings = {
     calloutColors: {}
 };
 
+interface CalloutConnection {
+    id: string;                    // 连接唯一ID
+    targetCalloutId: string;       // 目标callout ID
+    connectionType?: 'relates' | 'supports' | 'follows' | 'contradicts';
+    label?: string;                // 连接标签
+    createdTime: string;           // 创建时间
+}
+
 interface CalloutItem {
     file: string;
     type: string;
@@ -91,6 +103,8 @@ interface CalloutItem {
     fileModTime?: string; // Human-readable file modification time (YYYY-MM-DD HH:mm:ss)
     calloutCreatedTime?: string; // Human-readable time when callout was first created (YYYY-MM-DD HH:mm:ss)
     calloutModifyTime?: string;  // Human-readable time when callout was last modified (YYYY-MM-DD HH:mm:ss)
+    inlinks?: [string, string][]; // Array of [filename, calloutID] pairs that link TO this callout
+    outlinks?: [string, string][]; // Array of [filename, calloutID] pairs that this callout links TO
 }
 
 interface HeadingInfo {
@@ -731,6 +745,26 @@ class CalloutOrganizerView extends ItemView {
                 }
                 
                 e.dataTransfer.setData('text/plain', linkText);
+                
+                // Provide additional data formats that might influence canvas node creation
+                // Method 1: Try to mimic file drag behavior
+                const obsidianFile = this.plugin.app.vault.getAbstractFileByPath(callout.file);
+                if (obsidianFile) {
+                    e.dataTransfer.setData('text/x-obsidian-file', JSON.stringify({
+                        file: callout.file,
+                        subpath: `#^${calloutID}`,
+                        type: 'block'
+                    }));
+                }
+                
+                // Method 2: Set suggested canvas node properties
+                const suggestedNodeProps = {
+                    id: `${filename}.md#^${calloutID}`,
+                    text: linkText,
+                    type: 'text'
+                };
+                e.dataTransfer.setData('text/canvas-node-props', JSON.stringify(suggestedNodeProps));
+                
                 e.dataTransfer.effectAllowed = 'copy';
                 
                 // Add visual feedback during drag
@@ -1261,6 +1295,9 @@ export default class CalloutOrganizerPlugin extends Plugin {
             VIEW_TYPE_CALLOUT_ORGANIZER,
             (leaf) => new CalloutOrganizerView(leaf, this, 'current')
         );
+        
+        // Register canvas drop handler to fix node IDs
+        this.registerDomEvent(document, 'drop', this.handleCanvasDrop.bind(this), true);
 
         this.addRibbonIcon('album', 'Open Callout Organizer', () => {
             this.activateCalloutOrganizer();
@@ -1271,6 +1308,14 @@ export default class CalloutOrganizerPlugin extends Plugin {
             name: 'Open Callout Organizer',
             callback: () => {
                 this.activateCalloutOrganizer();
+            }
+        });
+
+        this.addCommand({
+            id: 'open-callout-graphview',
+            name: 'Open Callout Graphview',
+            callback: () => {
+                this.openCalloutGraphview();
             }
         });
 
@@ -1638,6 +1683,558 @@ export default class CalloutOrganizerPlugin extends Plugin {
         }
     }
 
+    async openCalloutGraphview() {
+        try {
+            // 获取所有 callouts
+            const cache = await this.loadCalloutCache();
+            const callouts = cache?.callouts || [];
+            
+            if (callouts.length === 0) {
+                new Notice('No callouts found in the vault.');
+                return;
+            }
+
+            // 只显示具有calloutID的callouts
+            const calloutsWithID = callouts.filter(callout => callout.calloutID);
+            
+            if (calloutsWithID.length === 0) {
+                new Notice('No callouts with IDs found. Only callouts with calloutID can open graph view.');
+                return;
+            }
+
+            // 创建callout选择器模态框
+            const modal = new CalloutSelectorModal(this.app, calloutsWithID, async (selectedCallout) => {
+                await this.createCalloutGraphCanvas(selectedCallout);
+            });
+            
+            modal.open();
+            
+        } catch (error) {
+            console.error('Error opening callout graphview:', error);
+            new Notice('Error opening callout graphview. Check console for details.');
+        }
+    }
+
+    private async createCalloutGraphCanvas(selectedCallout: CalloutItem) {
+        try {
+            // Include filename in naming to avoid duplicates
+            const sourceFilename = selectedCallout.file?.split('/').pop()?.replace('.md', '') || 'unknown';
+            const canvasFileName = `callout-${sourceFilename}-${selectedCallout.calloutID || Date.now()}.canvas`;
+            const canvasPath = `${this.settings.canvasStorageFolder}/${canvasFileName}`;
+            
+            // Ensure canvas storage folder exists
+            const canvasFolder = this.app.vault.getAbstractFileByPath(this.settings.canvasStorageFolder);
+            if (!canvasFolder) {
+                await this.app.vault.createFolder(this.settings.canvasStorageFolder);
+            }
+            
+            // 创建基础的 canvas 数据结构
+            const canvasData = {
+                nodes: [
+                    {
+                        id: `${selectedCallout.file}#^${selectedCallout.calloutID}`,
+                        type: "text",
+                        text: `![[${selectedCallout.file}#^${selectedCallout.calloutID}]]`,
+                        x: 0,
+                        y: 0,
+                        width: 400,
+                        height: 200,
+                        color: this.getCanvasColorForCallout(selectedCallout.type)
+                    }
+                ],
+                edges: []
+            };
+
+            // 添加相关的 callouts 作为节点并创建边
+            const relatedCallouts = await this.getRelatedCallouts(selectedCallout);
+            const mainCalloutId = `${selectedCallout.file}#^${selectedCallout.calloutID}`;
+            
+            // 分类callouts：单向inlinks, 单向outlinks, 双向连接
+            const inlinksCallouts: CalloutItem[] = [];
+            const outlinksCallouts: CalloutItem[] = [];
+            const bidirectionalCallouts: CalloutItem[] = [];
+            
+            relatedCallouts.forEach(callout => {
+                const isInlink = selectedCallout.inlinks?.some(([file, id]) => 
+                    file === callout.file && id === callout.calloutID
+                );
+                const isOutlink = selectedCallout.outlinks?.some(([file, id]) => 
+                    file === callout.file && id === callout.calloutID
+                );
+                
+                if (isInlink && isOutlink) {
+                    bidirectionalCallouts.push(callout);
+                } else if (isInlink) {
+                    inlinksCallouts.push(callout);
+                } else if (isOutlink) {
+                    outlinksCallouts.push(callout);
+                }
+            });
+            
+            // 添加单向inlinks节点（左侧）
+            inlinksCallouts.forEach((callout, index) => {
+                const y = (index - (inlinksCallouts.length - 1) / 2) * 200;
+                const calloutId = `${callout.file}#^${callout.calloutID}`;
+                
+                canvasData.nodes.push({
+                    id: calloutId,
+                    type: "text",
+                    text: `![[${callout.file}#^${callout.calloutID}]]`,
+                    x: -600,
+                    y: y,
+                    width: 350,
+                    height: 150,
+                    color: this.getCanvasColorForCallout(callout.type)
+                });
+                
+                // 创建从inlink到主callout的边
+                (canvasData.edges as any[]).push({
+                    id: `edge-${calloutId}-to-main`,
+                    fromNode: calloutId,
+                    fromSide: "right",
+                    toNode: mainCalloutId,
+                    toSide: "left"
+                });
+            });
+            
+            // 添加单向outlinks节点（右侧）
+            outlinksCallouts.forEach((callout, index) => {
+                const y = (index - (outlinksCallouts.length - 1) / 2) * 200;
+                const calloutId = `${callout.file}#^${callout.calloutID}`;
+                
+                canvasData.nodes.push({
+                    id: calloutId,
+                    type: "text",
+                    text: `![[${callout.file}#^${callout.calloutID}]]`,
+                    x: 600,
+                    y: y,
+                    width: 350,
+                    height: 150,
+                    color: this.getCanvasColorForCallout(callout.type)
+                });
+                
+                // 创建从主callout到outlink的边
+                (canvasData.edges as any[]).push({
+                    id: `edge-main-to-${calloutId}`,
+                    fromNode: mainCalloutId,
+                    fromSide: "right",
+                    toNode: calloutId,
+                    toSide: "left"
+                });
+            });
+            
+            // 添加双向连接节点（中央上下排列）
+            if (bidirectionalCallouts.length > 0) {
+                // 调整主节点位置以便为双向节点留出空间
+                if (bidirectionalCallouts.length === 1) {
+                    // 一个双向节点：主节点在上，双向节点在下
+                    canvasData.nodes[0].y = -150; // 主节点上移
+                    
+                    const callout = bidirectionalCallouts[0];
+                    const calloutId = `${callout.file}#^${callout.calloutID}`;
+                    
+                    canvasData.nodes.push({
+                        id: calloutId,
+                        type: "text",
+                        text: `![[${callout.file}#^${callout.calloutID}]]`,
+                        x: 0,
+                        y: 150, // 双向节点在下
+                        width: 350,
+                        height: 150,
+                        color: this.getCanvasColorForCallout(callout.type)
+                    });
+                    
+                    // 创建双向连接
+                    (canvasData.edges as any[]).push({
+                        id: `edge-main-to-${calloutId}`,
+                        fromNode: mainCalloutId,
+                        fromSide: "bottom",
+                        toNode: calloutId,
+                        toSide: "top"
+                    });
+                    
+                    (canvasData.edges as any[]).push({
+                        id: `edge-${calloutId}-to-main`,
+                        fromNode: calloutId,
+                        fromSide: "top",
+                        toNode: mainCalloutId,
+                        toSide: "bottom"
+                    });
+                } else {
+                    // 多个双向节点：垂直排列
+                    const totalHeight = bidirectionalCallouts.length * 200;
+                    const startY = -totalHeight / 2 + 100;
+                    
+                    bidirectionalCallouts.forEach((callout, index) => {
+                        const y = startY + index * 200;
+                        const calloutId = `${callout.file}#^${callout.calloutID}`;
+                        
+                        canvasData.nodes.push({
+                            id: calloutId,
+                            type: "text",
+                            text: `![[${callout.file}#^${callout.calloutID}]]`,
+                            x: 0,
+                            y: y,
+                            width: 350,
+                            height: 150,
+                            color: this.getCanvasColorForCallout(callout.type)
+                        });
+                        
+                        // 为每个双向节点创建双向连接
+                        (canvasData.edges as any[]).push({
+                            id: `edge-main-to-${calloutId}`,
+                            fromNode: mainCalloutId,
+                            fromSide: y < 0 ? "top" : "bottom",
+                            toNode: calloutId,
+                            toSide: y < 0 ? "bottom" : "top"
+                        });
+                        
+                        (canvasData.edges as any[]).push({
+                            id: `edge-${calloutId}-to-main`,
+                            fromNode: calloutId,
+                            fromSide: y < 0 ? "bottom" : "top",
+                            toNode: mainCalloutId,
+                            toSide: y < 0 ? "top" : "bottom"
+                        });
+                    });
+                }
+            }
+
+            // 始终重新生成canvas文件以反映最新的连接关系
+            try {
+                let canvasFile = this.app.vault.getAbstractFileByPath(canvasPath);
+                
+                if (canvasFile) {
+                    // 文件已存在，删除旧文件
+                    await this.app.vault.delete(canvasFile);
+                    console.log(`Deleted existing canvas file: ${canvasPath}`);
+                }
+                
+                // 创建新的canvas文件
+                canvasFile = await this.app.vault.create(canvasPath, JSON.stringify(canvasData, null, 2));
+                
+                if (canvasFile) {
+                    const leaf = this.app.workspace.getUnpinnedLeaf();
+                    await leaf.openFile(canvasFile as any);
+                    new Notice(`Regenerated and opened canvas for callout: ${selectedCallout.title}`);
+                } else {
+                    new Notice('Canvas created but could not be opened automatically.');
+                }
+            } catch (error: any) {
+                console.error('Error regenerating canvas:', error);
+                new Notice('Error regenerating canvas. Check console for details.');
+            }
+            
+        } catch (error) {
+            console.error('Error creating canvas:', error);
+            new Notice('Error creating canvas. Check console for details.');
+        }
+    }
+
+    private async getRelatedCallouts(selectedCallout: CalloutItem): Promise<CalloutItem[]> {
+        const cache = await this.loadCalloutCache();
+        const allCallouts = cache?.callouts || [];
+        
+        // 创建[filename, calloutID]到callout的映射
+        const calloutMap = new Map<string, CalloutItem>();
+        allCallouts.forEach(callout => {
+            if (callout.calloutID) {
+                const key = `${callout.file}:${callout.calloutID}`;
+                calloutMap.set(key, callout);
+            }
+        });
+        
+        const relatedCallouts: CalloutItem[] = [];
+        const addedCalloutKeys = new Set<string>();
+        
+        // 添加inlinks callouts
+        if (selectedCallout.inlinks) {
+            selectedCallout.inlinks.forEach(([filename, calloutID]) => {
+                const key = `${filename}:${calloutID}`;
+                const callout = calloutMap.get(key);
+                if (callout && !addedCalloutKeys.has(key)) {
+                    relatedCallouts.push(callout);
+                    addedCalloutKeys.add(key);
+                }
+            });
+        }
+        
+        // 添加outlinks callouts
+        if (selectedCallout.outlinks) {
+            selectedCallout.outlinks.forEach(([filename, calloutID]) => {
+                const key = `${filename}:${calloutID}`;
+                const callout = calloutMap.get(key);
+                if (callout && !addedCalloutKeys.has(key)) {
+                    relatedCallouts.push(callout);
+                    addedCalloutKeys.add(key);
+                }
+            });
+        }
+        
+        return relatedCallouts;
+    }
+
+    /**
+     * 根据callout类型获取对应的canvas颜色
+     */
+    private getCanvasColorForCallout(calloutType: string): string {
+        const calloutColor = this.settings.calloutColors[calloutType]?.color;
+        if (!calloutColor) {
+            return "1"; // 默认颜色
+        }
+        
+        // 将十六进制颜色映射到Obsidian canvas颜色索引
+        // Obsidian canvas颜色索引：1-6对应不同颜色
+        const colorMap: Record<string, string> = {
+            "#086ddd": "1", // 蓝色 - note, info等
+            "#08b94e": "2", // 绿色 - success, check等  
+            "#ec7500": "3", // 橙色 - warning, attention等
+            "#e93147": "4", // 红色 - error, danger等
+            "#7852ee": "5", // 紫色 - example等
+            "#00bfbc": "6", // 青色 - tip, important等
+        };
+        
+        // 首先尝试精确匹配
+        if (colorMap[calloutColor.toLowerCase()]) {
+            return colorMap[calloutColor.toLowerCase()];
+        }
+        
+        // 如果没有精确匹配，根据颜色相似性选择
+        const color = calloutColor.toLowerCase();
+        if (color.includes("086d") || color.includes("2ea8")) return "1"; // 蓝色系
+        if (color.includes("08b9") || color.includes("5fb2")) return "2"; // 绿色系
+        if (color.includes("ec75") || color.includes("f5ca") || color.includes("f198")) return "3"; // 橙/黄色系
+        if (color.includes("e931") || color.includes("ff66")) return "4"; // 红色系
+        if (color.includes("785") || color.includes("e56e") || color.includes("a28a") || color.includes("ff66")) return "5"; // 紫色系
+        if (color.includes("00bf") || color.includes("9e9e")) return "6"; // 青/灰色系
+        
+        return "1"; // 默认颜色
+    }
+
+    /**
+     * 分析canvas文件中的链接关系，更新callout的inlinks和outlinks
+     */
+    private async analyzeCanvasLinks(callouts: CalloutItem[]): Promise<CalloutItem[]> {
+        try {
+            // 初始化所有callout的links
+            const updatedCallouts = callouts.map(callout => ({
+                ...callout,
+                inlinks: [],
+                outlinks: []
+            }));
+
+            // 创建[filename, calloutID]到callout的映射
+            const calloutMap = new Map<string, CalloutItem>();
+            updatedCallouts.forEach(callout => {
+                if (callout.calloutID) {
+                    const key = `${callout.file}:${callout.calloutID}`;
+                    calloutMap.set(key, callout);
+                }
+            });
+
+            // 获取canvas存储文件夹中的所有canvas文件
+            const canvasFolder = this.app.vault.getAbstractFileByPath(this.settings.canvasStorageFolder);
+            if (!canvasFolder || !(canvasFolder instanceof TFolder)) {
+                console.log('Canvas folder not found, skipping link analysis');
+                return updatedCallouts;
+            }
+
+            const canvasFiles = canvasFolder.children.filter(file => 
+                file instanceof TFile && file.extension === 'canvas'
+            ) as TFile[];
+
+            // 分析每个canvas文件
+            for (const canvasFile of canvasFiles) {
+                try {
+                    const canvasContent = await this.app.vault.read(canvasFile);
+                    const canvasData = JSON.parse(canvasContent);
+                    
+                    if (canvasData.edges && Array.isArray(canvasData.edges) && canvasData.nodes && Array.isArray(canvasData.nodes)) {
+                        // 创建节点ID到[filename, calloutID]的映射
+                        const nodeIdToCallout = new Map<string, [string, string]>();
+                        
+                        canvasData.nodes.forEach((node: any) => {
+                            if (node.type === 'text') {
+                                // 方法1: 直接从节点ID解析（新格式：filename#^calloutID）
+                                const nodeIdMatch = node.id.match(/^([^#]+)#\^(.+)$/);
+                                if (nodeIdMatch) {
+                                    const filename = nodeIdMatch[1];
+                                    const calloutID = nodeIdMatch[2];
+                                    nodeIdToCallout.set(node.id, [filename, calloutID]);
+                                } else if (node.text) {
+                                    // 方法2: 从嵌入链接解析（向后兼容旧格式）
+                                    const embedMatch = node.text.match(/!\[\[([^#\]]+)#\^([^\]]+)\]\]/);
+                                    if (embedMatch) {
+                                        const filename = embedMatch[1];
+                                        const calloutID = embedMatch[2];
+                                        nodeIdToCallout.set(node.id, [filename, calloutID]);
+                                    }
+                                }
+                            }
+                        });
+                        
+                        // 分析边（连接）
+                        console.log(`Processing ${canvasData.edges.length} edges in canvas ${canvasFile.path}`);
+                        canvasData.edges.forEach((edge: any, edgeIndex: number) => {
+                            const fromNodeId = edge.fromNode;
+                            const toNodeId = edge.toNode;
+                            
+                            console.log(`Edge ${edgeIndex + 1}: ${fromNodeId} -> ${toNodeId}`);
+                            
+                            const fromCalloutInfo = nodeIdToCallout.get(fromNodeId);
+                            const toCalloutInfo = nodeIdToCallout.get(toNodeId);
+                            
+                            if (fromCalloutInfo && toCalloutInfo) {
+                                const [fromFile, fromCalloutID] = fromCalloutInfo;
+                                const [toFile, toCalloutID] = toCalloutInfo;
+                                
+                                console.log(`  Mapping: [${fromFile}:${fromCalloutID}] -> [${toFile}:${toCalloutID}]`);
+                                
+                                const fromKey = `${fromFile}:${fromCalloutID}`;
+                                const toKey = `${toFile}:${toCalloutID}`;
+                                
+                                const fromCallout = calloutMap.get(fromKey);
+                                const toCallout = calloutMap.get(toKey);
+                                
+                                if (fromCallout && toCallout) {
+                                    // A -> B: A的outlinks包含[toFile, toCalloutID], B的inlinks包含[fromFile, fromCalloutID]
+                                    fromCallout.outlinks = fromCallout.outlinks || [];
+                                    const outLinkExists = fromCallout.outlinks.some(([file, id]) => file === toFile && id === toCalloutID);
+                                    if (!outLinkExists) {
+                                        fromCallout.outlinks.push([toFile, toCalloutID]);
+                                        console.log(`  Added outlink: ${fromFile}:${fromCalloutID} -> ${toFile}:${toCalloutID}`);
+                                    } else {
+                                        console.log(`  Outlink already exists: ${fromFile}:${fromCalloutID} -> ${toFile}:${toCalloutID}`);
+                                    }
+                                    
+                                    toCallout.inlinks = toCallout.inlinks || [];
+                                    const inLinkExists = toCallout.inlinks.some(([file, id]) => file === fromFile && id === fromCalloutID);
+                                    if (!inLinkExists) {
+                                        toCallout.inlinks.push([fromFile, fromCalloutID]);
+                                        console.log(`  Added inlink: ${toFile}:${toCalloutID} <- ${fromFile}:${fromCalloutID}`);
+                                    } else {
+                                        console.log(`  Inlink already exists: ${toFile}:${toCalloutID} <- ${fromFile}:${fromCalloutID}`);
+                                    }
+                                } else {
+                                    console.log(`  Could not find callouts in map: from=${!!fromCallout}, to=${!!toCallout}`);
+                                }
+                            } else {
+                                console.log(`  Could not resolve node IDs: from=${!!fromCalloutInfo}, to=${!!toCalloutInfo}`);
+                            }
+                        });
+                    }
+                } catch (error) {
+                    console.warn(`Failed to analyze canvas file ${canvasFile.path}:`, error);
+                }
+            }
+
+            // 显示最终的链接统计
+            console.log('Final link analysis results:');
+            updatedCallouts.forEach(callout => {
+                if ((callout.inlinks && callout.inlinks.length > 0) || (callout.outlinks && callout.outlinks.length > 0)) {
+                    console.log(`${callout.file}#^${callout.calloutID}:`);
+                    if (callout.inlinks && callout.inlinks.length > 0) {
+                        console.log(`  inlinks: ${(callout.inlinks as [string, string][]).map(([f, id]) => `${f}#^${id}`).join(', ')}`);
+                    }
+                    if (callout.outlinks && callout.outlinks.length > 0) {
+                        console.log(`  outlinks: ${(callout.outlinks as [string, string][]).map(([f, id]) => `${f}#^${id}`).join(', ')}`);
+                    }
+                }
+            });
+
+            return updatedCallouts;
+        } catch (error) {
+            console.error('Error analyzing canvas links:', error);
+            return callouts; // 返回原始callouts如果分析失败
+        }
+    }
+
+    /**
+     * Handle canvas drop events to fix node IDs for callout nodes
+     */
+    private handleCanvasDrop(event: DragEvent) {
+        // Check if this is a canvas
+        const target = event.target as HTMLElement;
+        const canvasEl = target.closest('.canvas-node-container, .canvas-wrapper, .view-content[data-type="canvas"]');
+        
+        if (!canvasEl || !event.dataTransfer) return;
+        
+        const canvasNodeProps = event.dataTransfer.getData('text/canvas-node-props');
+        if (canvasNodeProps) {
+            try {
+                const props = JSON.parse(canvasNodeProps);
+                // Use setTimeout to allow canvas to create the node first
+                setTimeout(() => {
+                    this.fixCanvasNodeId(canvasEl, props);
+                }, 100);
+            } catch (error) {
+                console.error('Error parsing canvas node props:', error);
+            }
+        }
+    }
+
+    /**
+     * Fix the canvas node ID after it's been created
+     */
+    private async fixCanvasNodeId(canvasEl: Element, nodeProps: any) {
+        try {
+            // Find the active canvas view
+            const activeLeaf = this.app.workspace.activeLeaf;
+            if (activeLeaf && activeLeaf.view && activeLeaf.view.getViewType() === 'canvas') {
+                const canvasView = activeLeaf.view as any;
+                const canvas = canvasView.canvas;
+                
+                if (!canvas || !canvas.nodes) return;
+                
+                // Check if a node with the desired ID already exists
+                if (canvas.nodes.has(nodeProps.id)) {
+                    console.log(`Node with ID ${nodeProps.id} already exists, skipping`);
+                    return;
+                }
+                
+                // Find the most recently created node with matching text but different ID
+                let targetNode = null;
+                let oldNodeId = null;
+                
+                for (const [nodeId, node] of canvas.nodes) {
+                    if (node.text === nodeProps.text && nodeId !== nodeProps.id) {
+                        targetNode = node;
+                        oldNodeId = nodeId;
+                        break;
+                    }
+                }
+                
+                if (targetNode && oldNodeId && nodeProps.id) {
+                    console.log(`Updating canvas node ID from ${oldNodeId} to ${nodeProps.id}`);
+                    
+                    // Store the old node ID before changing it
+                    const originalId = targetNode.id;
+                    
+                    // Update the node's ID property
+                    targetNode.id = nodeProps.id;
+                    
+                    // Remove the old entry from the nodes map
+                    canvas.nodes.delete(originalId);
+                    
+                    // Add the node with the new ID
+                    canvas.nodes.set(nodeProps.id, targetNode);
+                    
+                    // Trigger canvas update and save
+                    if (canvas.requestSave) {
+                        canvas.requestSave();
+                    }
+                    
+                    // Force canvas to re-render to ensure UI consistency
+                    if (canvas.markDirty) {
+                        canvas.markDirty();
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('Error fixing canvas node ID:', error);
+        }
+    }
+
     getCalloutView(): CalloutOrganizerView | null {
         const leaves = this.app.workspace.getLeavesOfType(VIEW_TYPE_CALLOUT_ORGANIZER);
         if (leaves.length > 0) {
@@ -1731,13 +2328,17 @@ export default class CalloutOrganizerPlugin extends Plugin {
         console.log('Refreshing callouts - rescanning all files...');
         const callouts = await this.scanAllCallouts();
         
+        // 分析canvas链接关系（只在手动刷新时执行）
+        console.log('Analyzing canvas connections...');
+        const calloutsWithLinks = await this.analyzeCanvasLinks(callouts);
+        
         // Update cache
         if (this.settings.enableFileCache) {
-            await this.saveCalloutCache(callouts);
-            console.log(`Updated cache with ${callouts.length} callouts`);
+            await this.saveCalloutCache(calloutsWithLinks);
+            console.log(`Updated cache with ${calloutsWithLinks.length} callouts and their connections`);
         }
 
-        return callouts;
+        return calloutsWithLinks;
     }
 
     shouldSkipFile(filePath: string, searchMode: boolean = false): boolean {
@@ -2257,6 +2858,21 @@ class CalloutOrganizerSettingTab extends PluginSettingTab {
                     }
                 }));
 
+        // Canvas Options
+        containerEl.createEl('h3', {text: 'Canvas Options'});
+        
+        const canvasContainer = containerEl.createEl('div', {cls: 'callout-settings-indent'});
+        
+        new Setting(canvasContainer)
+            .setName('Canvas Storage Folder')
+            .setDesc('Folder where callout canvas files will be stored (relative to vault root)')
+            .addText(text => text
+                .setPlaceholder('Callout Connections')
+                .setValue(this.plugin.settings.canvasStorageFolder)
+                .onChange(async (value) => {
+                    this.plugin.settings.canvasStorageFolder = value || 'Callout Connections';
+                    await this.plugin.saveSettings();
+                }));
 
         containerEl.createEl('h3', {text: 'Display Options'});
 
@@ -2856,5 +3472,138 @@ class CalloutOrganizerSettingTab extends PluginSettingTab {
     getDefaultIconForCalloutType(type: string): string {
         // Use same defaults as main plugin method for consistency  
         return this.plugin.getDefaultIconForCalloutType(type);
+    }
+}
+
+// Callout选择器模态框
+class CalloutSelectorModal extends Modal {
+    private callouts: CalloutItem[];
+    private onSelect: (callout: CalloutItem) => Promise<void>;
+    private filteredCallouts: CalloutItem[];
+    private searchInput: HTMLInputElement;
+    private resultContainer: HTMLElement;
+
+    constructor(app: App, callouts: CalloutItem[], onSelect: (callout: CalloutItem) => Promise<void>) {
+        super(app);
+        this.callouts = callouts;
+        this.filteredCallouts = [...callouts];
+        this.onSelect = onSelect;
+    }
+
+    onOpen() {
+        const { contentEl } = this;
+        contentEl.empty();
+
+        // 标题
+        contentEl.createEl('h2', { text: 'Select a Callout for Graph View' });
+
+        // 搜索框
+        const searchContainer = contentEl.createDiv('callout-selector-search');
+        this.searchInput = searchContainer.createEl('input', {
+            type: 'text',
+            placeholder: 'Search callouts by title, type, or content...'
+        });
+
+        this.searchInput.addEventListener('input', () => this.filterCallouts());
+
+        // 结果容器
+        this.resultContainer = contentEl.createDiv('callout-selector-results');
+
+        // 初始显示所有callouts
+        this.renderResults();
+
+        // 聚焦搜索框
+        this.searchInput.focus();
+    }
+
+    private filterCallouts() {
+        const query = this.searchInput.value.toLowerCase();
+        
+        if (!query) {
+            this.filteredCallouts = [...this.callouts];
+        } else {
+            this.filteredCallouts = this.callouts.filter(callout => 
+                callout.title.toLowerCase().includes(query) ||
+                callout.type.toLowerCase().includes(query) ||
+                callout.content.toLowerCase().includes(query) ||
+                callout.file.toLowerCase().includes(query)
+            );
+        }
+        
+        this.renderResults();
+    }
+
+    private renderResults() {
+        this.resultContainer.empty();
+
+        if (this.filteredCallouts.length === 0) {
+            this.resultContainer.createEl('p', { 
+                text: 'No callouts found matching your search.',
+                cls: 'callout-selector-no-results'
+            });
+            return;
+        }
+
+        // 限制显示数量以提升性能
+        const maxResults = 50;
+        const calloutsToShow = this.filteredCallouts.slice(0, maxResults);
+
+        calloutsToShow.forEach(callout => {
+            const item = this.resultContainer.createDiv('callout-selector-item');
+            
+            // Callout类型标签
+            const typeTag = item.createEl('span', { 
+                text: callout.type, 
+                cls: 'callout-selector-type-tag' 
+            });
+
+            // Callout标题
+            const title = item.createEl('div', { 
+                text: callout.title || 'Untitled', 
+                cls: 'callout-selector-title' 
+            });
+
+            // 文件信息
+            const fileInfo = item.createEl('div', { 
+                text: `📄 ${callout.file}`, 
+                cls: 'callout-selector-file' 
+            });
+
+            // 内容预览
+            if (callout.content) {
+                const preview = item.createEl('div', { 
+                    text: callout.content.slice(0, 100) + (callout.content.length > 100 ? '...' : ''), 
+                    cls: 'callout-selector-preview' 
+                });
+            }
+
+            // 点击事件
+            item.addEventListener('click', async () => {
+                this.close();
+                await this.onSelect(callout);
+            });
+
+            // 键盘导航支持
+            item.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    item.click();
+                }
+            });
+
+            item.tabIndex = 0;
+        });
+
+        if (this.filteredCallouts.length > maxResults) {
+            this.resultContainer.createEl('p', { 
+                text: `Showing first ${maxResults} of ${this.filteredCallouts.length} results. Use search to narrow down.`,
+                cls: 'callout-selector-more-results'
+            });
+        }
+    }
+
+    onClose() {
+        const { contentEl } = this;
+        contentEl.empty();
     }
 }
