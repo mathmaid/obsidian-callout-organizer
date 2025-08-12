@@ -64,6 +64,22 @@ var DEFAULT_SETTINGS = {
   calloutColors: {}
 };
 var VIEW_TYPE_CALLOUT_ORGANIZER = "callout-organizer";
+function timestampToReadable(timestamp) {
+  const date = new Date(timestamp);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+  const seconds = String(date.getSeconds()).padStart(2, "0");
+  return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+}
+function readableToTimestamp(readable) {
+  return new Date(readable).getTime();
+}
+function hasCalloutChanged(newCallout, existingCallout) {
+  return newCallout.type !== existingCallout.type || newCallout.title !== existingCallout.title || newCallout.content !== existingCallout.content;
+}
 var CalloutOrganizerView = class extends import_obsidian.ItemView {
   constructor(leaf, plugin, mode = "current") {
     super(leaf);
@@ -371,8 +387,8 @@ var CalloutOrganizerView = class extends import_obsidian.ItemView {
           if (settings.searchInCalloutTitles) {
             searchText += callout.title.toLowerCase() + " ";
           }
-          if (settings.searchInCalloutIds && callout.blockId) {
-            searchText += callout.blockId.toLowerCase() + " ";
+          if (settings.searchInCalloutIds && callout.calloutID) {
+            searchText += callout.calloutID.toLowerCase() + " ";
           }
           if (settings.searchInCalloutContent) {
             searchText += callout.content.toLowerCase() + " ";
@@ -383,8 +399,8 @@ var CalloutOrganizerView = class extends import_obsidian.ItemView {
             searchText += callout.headers.join(" ").toLowerCase() + " ";
           }
           searchText += callout.title.toLowerCase() + " ";
-          if (callout.blockId) {
-            searchText += callout.blockId.toLowerCase() + " ";
+          if (callout.calloutID) {
+            searchText += callout.calloutID.toLowerCase() + " ";
           }
           searchText += callout.content.toLowerCase() + " ";
         }
@@ -425,8 +441,10 @@ var CalloutOrganizerView = class extends import_obsidian.ItemView {
       }
     } else {
       calloutsToRender = [...filteredCallouts].sort((a, b) => {
-        if (this.searchMode === "search" && a.fileModTime && b.fileModTime) {
-          return b.fileModTime - a.fileModTime;
+        if (this.searchMode === "search") {
+          const aModTime = a.calloutModifyTime || a.fileModTime || "1970-01-01 00:00:00";
+          const bModTime = b.calloutModifyTime || b.fileModTime || "1970-01-01 00:00:00";
+          return readableToTimestamp(bModTime) - readableToTimestamp(aModTime);
         } else {
           return a.lineNumber - b.lineNumber;
         }
@@ -462,11 +480,11 @@ var CalloutOrganizerView = class extends import_obsidian.ItemView {
     };
     calloutEl.ondragstart = (e) => {
       if (e.dataTransfer) {
-        let blockId = callout.blockId;
+        let calloutID = callout.calloutID;
         let needsNewId = false;
-        if (!blockId) {
-          blockId = this.generateCalloutId(callout);
-          callout.blockId = blockId;
+        if (!calloutID) {
+          calloutID = this.generateCalloutId(callout);
+          callout.calloutID = calloutID;
           needsNewId = true;
         }
         const useEmbed = this.plugin.settings.useEmbedLinks;
@@ -474,18 +492,18 @@ var CalloutOrganizerView = class extends import_obsidian.ItemView {
         const filename = filenameWithExt.replace(/\.md$/, "");
         let linkText;
         if (this.plugin.settings.hideFileNamesInLinks) {
-          const alias = this.generateCalloutAlias(callout, blockId);
-          linkText = useEmbed ? `![[${filename}#^${blockId}|${alias}]]` : `[[${filename}#^${blockId}|${alias}]]`;
+          const alias = this.generateCalloutAlias(callout, calloutID);
+          linkText = useEmbed ? `![[${filename}#^${calloutID}|${alias}]]` : `[[${filename}#^${calloutID}|${alias}]]`;
         } else {
-          linkText = useEmbed ? `![[${filename}#^${blockId}]]` : `[[${filename}#^${blockId}]]`;
+          linkText = useEmbed ? `![[${filename}#^${calloutID}]]` : `[[${filename}#^${calloutID}]]`;
         }
         e.dataTransfer.setData("text/plain", linkText);
         e.dataTransfer.effectAllowed = "copy";
         calloutEl.style.opacity = "0.5";
-        if (needsNewId && blockId) {
+        if (needsNewId && calloutID) {
           queueMicrotask(() => {
-            this.addBlockIdToCallout(callout, blockId).catch((error) => {
-              console.error("Error adding block ID to file:", error);
+            this.addCalloutIdToCallout(callout, calloutID).catch((error) => {
+              console.error("Error adding callout ID to file:", error);
             });
           });
         }
@@ -560,7 +578,7 @@ var CalloutOrganizerView = class extends import_obsidian.ItemView {
         };
       }
     }
-    if (callout.blockId && this.plugin.settings.showCalloutIds) {
+    if (callout.calloutID && this.plugin.settings.showCalloutIds) {
       if (breadcrumb.children.length > 0) {
         breadcrumb.createEl("span", {
           text: " > ",
@@ -568,9 +586,9 @@ var CalloutOrganizerView = class extends import_obsidian.ItemView {
         });
       }
       const blockLink = breadcrumb.createEl("a", {
-        text: `^${callout.blockId}`,
+        text: `^${callout.calloutID}`,
         href: "#",
-        cls: "callout-organizer-block-id"
+        cls: "callout-organizer-callout-id"
       });
       blockLink.onclick = (e) => {
         e.preventDefault();
@@ -591,8 +609,10 @@ var CalloutOrganizerView = class extends import_obsidian.ItemView {
     });
     Object.keys(grouped).forEach((type) => {
       grouped[type].sort((a, b) => {
-        if (this.searchMode === "search" && a.fileModTime && b.fileModTime) {
-          return b.fileModTime - a.fileModTime;
+        if (this.searchMode === "search") {
+          const aModTime = a.calloutModifyTime || a.fileModTime || "1970-01-01 00:00:00";
+          const bModTime = b.calloutModifyTime || b.fileModTime || "1970-01-01 00:00:00";
+          return readableToTimestamp(bModTime) - readableToTimestamp(aModTime);
         } else {
           return a.lineNumber - b.lineNumber;
         }
@@ -600,8 +620,8 @@ var CalloutOrganizerView = class extends import_obsidian.ItemView {
     });
     return grouped;
   }
-  generateCalloutAlias(_callout, blockId) {
-    return blockId;
+  generateCalloutAlias(_callout, calloutID) {
+    return calloutID;
   }
   generateCalloutId(callout) {
     const type = callout.type.toLowerCase();
@@ -612,7 +632,7 @@ var CalloutOrganizerView = class extends import_obsidian.ItemView {
     }
     return `${type}-${randomChars}`;
   }
-  async addBlockIdToCallout(callout, blockId) {
+  async addCalloutIdToCallout(callout, calloutID) {
     try {
       const file = this.app.vault.getAbstractFileByPath(callout.file);
       if (!(file instanceof import_obsidian.TFile)) {
@@ -687,19 +707,19 @@ var CalloutOrganizerView = class extends import_obsidian.ItemView {
           }
         }
         if (!hasBlockId) {
-          lines.splice(lastCalloutLineIndex + 1, 0, `> ^${blockId}`);
+          lines.splice(lastCalloutLineIndex + 1, 0, `> ^${calloutID}`);
           if (lastCalloutLineIndex + 2 < lines.length && lines[lastCalloutLineIndex + 2].trim() !== "") {
             lines.splice(lastCalloutLineIndex + 2, 0, "");
           } else if (lastCalloutLineIndex + 2 >= lines.length) {
             lines.push("");
           }
           await this.app.vault.modify(file, lines.join("\n"));
-          callout.blockId = blockId;
+          callout.calloutID = calloutID;
         }
       }
     } catch (error) {
-      console.error("Error adding block ID to callout:", error);
-      new import_obsidian.Notice("Failed to add block ID to callout");
+      console.error("Error adding callout ID to callout:", error);
+      new import_obsidian.Notice("Failed to add callout ID to callout");
     }
   }
   async openFile(filename, lineNumber, newTab) {
@@ -1244,7 +1264,12 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
       const cache = await this.loadCalloutCache();
       if (cache && await this.isCacheValid(cache)) {
         console.log(`\u2705 Using cached callouts: ${cache.callouts.length} items`);
-        return cache.callouts;
+        const sortedCallouts = [...cache.callouts].sort((a, b) => {
+          const aModTime = a.calloutModifyTime || a.fileModTime || "1970-01-01 00:00:00";
+          const bModTime = b.calloutModifyTime || b.fileModTime || "1970-01-01 00:00:00";
+          return readableToTimestamp(bModTime) - readableToTimestamp(aModTime);
+        });
+        return sortedCallouts;
       } else {
         console.log("\u274C Cache invalid or not found, will scan files");
       }
@@ -1302,11 +1327,21 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
       (folder) => filePath.startsWith(folder + "/") || filePath === folder
     );
   }
+  // Create a unique signature for a callout to track its creation time
+  createCalloutSignature(filePath, calloutID) {
+    if (calloutID) {
+      return `${filePath}:${calloutID}`;
+    }
+    const tempId = `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    return `${filePath}:${tempId}`;
+  }
   async extractCalloutsFromFile(file) {
+    var _a, _b;
     const content = await this.app.vault.read(file);
     const lines = content.split("\n");
     const callouts = [];
     const fileModTime = file.stat.mtime;
+    const existingCache = await this.loadCalloutCache();
     const headingRegex = _CalloutOrganizerPlugin.HEADING_REGEX;
     const calloutRegex = _CalloutOrganizerPlugin.CALLOUT_REGEX;
     const blockIdRegex = _CalloutOrganizerPlugin.BLOCK_ID_REGEX;
@@ -1333,7 +1368,7 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
         const type = calloutMatch[1].toLowerCase();
         const title = calloutMatch[2].trim();
         const contentLines = [];
-        let blockId = "";
+        let calloutID = "";
         let j = i + 1;
         for (; j < lines.length; j++) {
           const nextLine = lines[j];
@@ -1347,7 +1382,7 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
             const contentLine = nextLine.replace(/^>\s?/, "");
             const blockMatch = contentLine.match(blockIdRegex);
             if (blockMatch) {
-              blockId = blockMatch[1];
+              calloutID = blockMatch[1];
               const cleanContent = contentLine.replace(/\s*\^[\w-]+\s*$/, "");
               if (cleanContent)
                 contentLines.push(cleanContent);
@@ -1369,16 +1404,56 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
           }
           hierarchy.push(heading);
         }
+        let calloutSignature;
+        if (calloutID) {
+          calloutSignature = this.createCalloutSignature(file.path, calloutID);
+        } else {
+          calloutSignature = `${file.path}:${currentLineNumber}:${type}:${title}`;
+        }
+        const currentTime = Date.now();
+        const currentReadableTime = timestampToReadable(currentTime);
+        const fileModTimeReadable = timestampToReadable(fileModTime);
+        const preliminaryCallout = {
+          file: file.path,
+          type,
+          title,
+          content: contentLines.join("\n").trim(),
+          lineNumber: currentLineNumber,
+          fileModTime: fileModTimeReadable
+        };
+        let creationTime;
+        let modificationTime;
+        if (calloutID) {
+          if ((_a = existingCache == null ? void 0 : existingCache.calloutCreationTimes) == null ? void 0 : _a[calloutSignature]) {
+            creationTime = existingCache.calloutCreationTimes[calloutSignature];
+            const existingCallout = (_b = existingCache.callouts) == null ? void 0 : _b.find(
+              (c) => c.calloutID === calloutID && c.file === file.path
+            );
+            if (existingCallout && hasCalloutChanged(preliminaryCallout, existingCallout)) {
+              modificationTime = currentReadableTime;
+            } else {
+              modificationTime = (existingCallout == null ? void 0 : existingCallout.calloutModifyTime) || currentReadableTime;
+            }
+          } else {
+            creationTime = currentReadableTime;
+            modificationTime = currentReadableTime;
+          }
+        } else {
+          creationTime = fileModTimeReadable;
+          modificationTime = fileModTimeReadable;
+        }
         const calloutItem = {
           file: file.path,
           type,
           title,
           content: contentLines.join("\n").trim(),
           lineNumber: currentLineNumber,
-          fileModTime
+          fileModTime: fileModTimeReadable,
+          calloutCreatedTime: creationTime,
+          calloutModifyTime: modificationTime
         };
-        if (blockId)
-          calloutItem.blockId = blockId;
+        if (calloutID)
+          calloutItem.calloutID = calloutID;
         if (hierarchy.length > 0) {
           calloutItem.headers = hierarchy.map((h) => h.title);
           calloutItem.headerLevels = hierarchy.map((h) => h.level);
@@ -1413,6 +1488,43 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
       }
       const cacheContent = fs.readFileSync(cachePath, "utf8");
       const cache = JSON.parse(cacheContent);
+      if (!cache.calloutCreationTimes) {
+        cache.calloutCreationTimes = {};
+      } else {
+        const convertedTimes = {};
+        for (const [signature, time] of Object.entries(cache.calloutCreationTimes)) {
+          if (typeof time === "number") {
+            convertedTimes[signature] = timestampToReadable(time);
+          } else {
+            convertedTimes[signature] = time;
+          }
+        }
+        cache.calloutCreationTimes = convertedTimes;
+      }
+      if (cache.fileModTimes) {
+        const convertedFileModTimes = {};
+        for (const [filePath, time] of Object.entries(cache.fileModTimes)) {
+          if (typeof time === "number") {
+            convertedFileModTimes[filePath] = timestampToReadable(time);
+          } else {
+            convertedFileModTimes[filePath] = time;
+          }
+        }
+        cache.fileModTimes = convertedFileModTimes;
+      }
+      if (cache.callouts) {
+        for (const callout of cache.callouts) {
+          if (callout.fileModTime && typeof callout.fileModTime === "number") {
+            callout.fileModTime = timestampToReadable(callout.fileModTime);
+          }
+          if (callout.calloutCreatedTime && typeof callout.calloutCreatedTime === "number") {
+            callout.calloutCreatedTime = timestampToReadable(callout.calloutCreatedTime);
+          }
+          if (callout.calloutModifyTime && typeof callout.calloutModifyTime === "number") {
+            callout.calloutModifyTime = timestampToReadable(callout.calloutModifyTime);
+          }
+        }
+      }
       if (cache.version !== _CalloutOrganizerPlugin.CACHE_VERSION) {
         console.log("Cache version mismatch, invalidating cache");
         return null;
@@ -1440,7 +1552,19 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
       const files = this.app.vault.getMarkdownFiles();
       for (const file of files) {
         if (!this.shouldSkipFile(file.path, true)) {
-          fileModTimes[file.path] = file.stat.mtime;
+          fileModTimes[file.path] = timestampToReadable(file.stat.mtime);
+        }
+      }
+      const calloutCreationTimes = {};
+      for (const callout of callouts) {
+        if (callout.calloutCreatedTime) {
+          let signature;
+          if (callout.calloutID) {
+            signature = this.createCalloutSignature(callout.file, callout.calloutID);
+          } else {
+            signature = `${callout.file}:${callout.lineNumber}:${callout.type}:${callout.title}`;
+          }
+          calloutCreationTimes[signature] = callout.calloutCreatedTime;
         }
       }
       const cache = {
@@ -1448,7 +1572,8 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
         timestamp: Date.now(),
         vaultPath: this.app.vault.getName() || "",
         callouts,
-        fileModTimes
+        fileModTimes,
+        calloutCreationTimes
       };
       const fs = require("fs");
       const path = require("path");
@@ -1477,7 +1602,7 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
       for (const [filePath, cachedModTime] of Object.entries(cache.fileModTimes)) {
         const file = this.app.vault.getAbstractFileByPath(filePath);
         if (file instanceof import_obsidian.TFile) {
-          if (file.stat.mtime > cachedModTime) {
+          if (file.stat.mtime > readableToTimestamp(cachedModTime)) {
             console.log(`File ${filePath} has been modified, cache invalid`);
             return false;
           }
@@ -1520,7 +1645,7 @@ CalloutOrganizerPlugin.CALLOUT_REGEX = /^>\s*\[!([^\]]+)\]\s*(.*?)$/;
 CalloutOrganizerPlugin.BLOCK_ID_REGEX = /\^([\w-]+)\s*$/;
 CalloutOrganizerPlugin.CONTENT_EXTRACT_REGEX = /^>\s?/;
 // Cache constants
-CalloutOrganizerPlugin.CACHE_VERSION = "1.0";
+CalloutOrganizerPlugin.CACHE_VERSION = "1.3";
 CalloutOrganizerPlugin.PLUGIN_FOLDER = "callout-organizer";
 CalloutOrganizerPlugin.CACHE_FILENAME = "callouts.json";
 var CalloutOrganizerSettingTab = class extends import_obsidian.PluginSettingTab {

@@ -165,6 +165,19 @@
     text-decoration: underline;
 }
 
+.callout-organizer-callout-id {
+    font-size: 0.9em;
+    color: var(--text-faint);
+    font-family: var(--font-monospace);
+    text-decoration: none;
+}
+
+.callout-organizer-callout-id:hover {
+    color: var(--interactive-accent);
+    text-decoration: underline;
+}
+
+/* Keep old class name for backward compatibility */
 .callout-organizer-block-id {
     font-size: 0.9em;
     color: var(--text-faint);

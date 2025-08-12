@@ -13,7 +13,8 @@ interface CalloutCache {
     timestamp: number;
     vaultPath: string;
     callouts: CalloutItem[];
-    fileModTimes: Record<string, number>; // file path -> modification time
+    fileModTimes: Record<string, string>; // file path -> modification time (readable format)
+    calloutCreationTimes: Record<string, string>; // callout signature -> creation time (readable format)
 }
 
 interface CalloutOrganizerSettings {
@@ -83,11 +84,13 @@ interface CalloutItem {
     type: string;
     title: string;
     content: string;
-    blockId?: string;
+    calloutID?: string;  // Unique identifier for the callout (replaces blockId)
     lineNumber: number;
     headers?: string[];
     headerLevels?: number[];
-    fileModTime?: number;
+    fileModTime?: string; // Human-readable file modification time (YYYY-MM-DD HH:mm:ss)
+    calloutCreatedTime?: string; // Human-readable time when callout was first created (YYYY-MM-DD HH:mm:ss)
+    calloutModifyTime?: string;  // Human-readable time when callout was last modified (YYYY-MM-DD HH:mm:ss)
 }
 
 interface HeadingInfo {
@@ -97,6 +100,29 @@ interface HeadingInfo {
 }
 
 const VIEW_TYPE_CALLOUT_ORGANIZER = "callout-organizer";
+
+// Utility functions for time formatting
+function timestampToReadable(timestamp: number): string {
+    const date = new Date(timestamp);
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    const seconds = String(date.getSeconds()).padStart(2, '0');
+    return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+}
+
+function readableToTimestamp(readable: string): number {
+    return new Date(readable).getTime();
+}
+
+// Helper function to check if callout content has changed
+function hasCalloutChanged(newCallout: CalloutItem, existingCallout: CalloutItem): boolean {
+    return newCallout.type !== existingCallout.type ||
+           newCallout.title !== existingCallout.title ||
+           newCallout.content !== existingCallout.content;
+}
 
 class CalloutOrganizerView extends ItemView {
     plugin: CalloutOrganizerPlugin;
@@ -519,8 +545,8 @@ class CalloutOrganizerView extends ItemView {
                     if (settings.searchInCalloutTitles) {
                         searchText += callout.title.toLowerCase() + ' ';
                     }
-                    if (settings.searchInCalloutIds && callout.blockId) {
-                        searchText += callout.blockId.toLowerCase() + ' ';
+                    if (settings.searchInCalloutIds && callout.calloutID) {
+                        searchText += callout.calloutID.toLowerCase() + ' ';
                     }
                     if (settings.searchInCalloutContent) {
                         searchText += callout.content.toLowerCase() + ' ';
@@ -532,8 +558,8 @@ class CalloutOrganizerView extends ItemView {
                         searchText += callout.headers.join(' ').toLowerCase() + ' ';
                     }
                     searchText += callout.title.toLowerCase() + ' ';
-                    if (callout.blockId) {
-                        searchText += callout.blockId.toLowerCase() + ' ';
+                    if (callout.calloutID) {
+                        searchText += callout.calloutID.toLowerCase() + ' ';
                     }
                     searchText += callout.content.toLowerCase() + ' ';
                 }
@@ -586,11 +612,13 @@ class CalloutOrganizerView extends ItemView {
         } else {
             // Sort based on mode
             calloutsToRender = [...filteredCallouts].sort((a, b) => {
-                if (this.searchMode === 'search' && a.fileModTime && b.fileModTime) {
-                    // In search mode, sort by modification time (recent first)
-                    return b.fileModTime - a.fileModTime;
+                if (this.searchMode === 'search') {
+                    // In search mode, sort by callout modification time (recent first)
+                    const aModTime = a.calloutModifyTime || a.fileModTime || '1970-01-01 00:00:00';
+                    const bModTime = b.calloutModifyTime || b.fileModTime || '1970-01-01 00:00:00';
+                    return readableToTimestamp(bModTime) - readableToTimestamp(aModTime);
                 } else {
-                    // In current file mode, keep file order (by line number)
+                    // In current file mode, sort by line number
                     return a.lineNumber - b.lineNumber;
                 }
             });
@@ -643,13 +671,13 @@ class CalloutOrganizerView extends ItemView {
         // Add drag functionality
         calloutEl.ondragstart = (e) => {
             if (e.dataTransfer) {
-                // Check if we need to generate a new block ID
-                let blockId = callout.blockId;
+                // Check if we need to generate a new callout ID
+                let calloutID = callout.calloutID;
                 let needsNewId = false;
                 
-                if (!blockId) {
-                    blockId = this.generateCalloutId(callout);
-                    callout.blockId = blockId;
+                if (!calloutID) {
+                    calloutID = this.generateCalloutId(callout);
+                    callout.calloutID = calloutID;
                     needsNewId = true;
                 }
                 
@@ -661,10 +689,10 @@ class CalloutOrganizerView extends ItemView {
                 let linkText: string;
                 if (this.plugin.settings.hideFileNamesInLinks) {
                     // Generate alias to hide filename
-                    const alias = this.generateCalloutAlias(callout, blockId);
-                    linkText = useEmbed ? `![[${filename}#^${blockId}|${alias}]]` : `[[${filename}#^${blockId}|${alias}]]`;
+                    const alias = this.generateCalloutAlias(callout, calloutID);
+                    linkText = useEmbed ? `![[${filename}#^${calloutID}|${alias}]]` : `[[${filename}#^${calloutID}|${alias}]]`;
                 } else {
-                    linkText = useEmbed ? `![[${filename}#^${blockId}]]` : `[[${filename}#^${blockId}]]`;
+                    linkText = useEmbed ? `![[${filename}#^${calloutID}]]` : `[[${filename}#^${calloutID}]]`;
                 }
                 
                 e.dataTransfer.setData('text/plain', linkText);
@@ -673,11 +701,11 @@ class CalloutOrganizerView extends ItemView {
                 // Add visual feedback during drag
                 calloutEl.style.opacity = '0.5';
                 
-                // Queue block ID addition without blocking UI
-                if (needsNewId && blockId) {
+                // Queue callout ID addition without blocking UI
+                if (needsNewId && calloutID) {
                     queueMicrotask(() => {
-                        this.addBlockIdToCallout(callout, blockId!).catch(error => {
-                            console.error('Error adding block ID to file:', error);
+                        this.addCalloutIdToCallout(callout, calloutID!).catch(error => {
+                            console.error('Error adding callout ID to file:', error);
                         });
                     });
                 }
@@ -783,8 +811,8 @@ class CalloutOrganizerView extends ItemView {
             }
         }
         
-        // Add block-id if present and enabled in settings
-        if (callout.blockId && this.plugin.settings.showCalloutIds) {
+        // Add callout-id if present and enabled in settings
+        if (callout.calloutID && this.plugin.settings.showCalloutIds) {
             if (breadcrumb.children.length > 0) {
                 breadcrumb.createEl("span", { 
                     text: " > ",
@@ -792,9 +820,9 @@ class CalloutOrganizerView extends ItemView {
                 });
             }
             const blockLink = breadcrumb.createEl("a", {
-                text: `^${callout.blockId}`,
+                text: `^${callout.calloutID}`,
                 href: "#",
-                cls: "callout-organizer-block-id"
+                cls: "callout-organizer-callout-id"
             });
             blockLink.onclick = (e) => {
                 e.preventDefault();
@@ -819,11 +847,13 @@ class CalloutOrganizerView extends ItemView {
         
         Object.keys(grouped).forEach(type => {
             grouped[type].sort((a, b) => {
-                if (this.searchMode === 'search' && a.fileModTime && b.fileModTime) {
-                    // In search mode, sort by modification time (recent first)
-                    return b.fileModTime - a.fileModTime;
+                if (this.searchMode === 'search') {
+                    // In search mode, sort by callout modification time (recent first)
+                    const aModTime = a.calloutModifyTime || a.fileModTime || '1970-01-01 00:00:00';
+                    const bModTime = b.calloutModifyTime || b.fileModTime || '1970-01-01 00:00:00';
+                    return readableToTimestamp(bModTime) - readableToTimestamp(aModTime);
                 } else {
-                    // In current file mode, keep file order (by line number)
+                    // In current file mode, sort by line number
                     return a.lineNumber - b.lineNumber;
                 }
             });
@@ -835,10 +865,10 @@ class CalloutOrganizerView extends ItemView {
 
 
 
-    generateCalloutAlias(_callout: CalloutItem, blockId: string): string {
+    generateCalloutAlias(_callout: CalloutItem, calloutID: string): string {
         // Generate alias using only the callout ID
         // e.g., "theorem-def456", "note-abc123", "example-xyz789"
-        return blockId;
+        return calloutID;
     }
 
     generateCalloutId(callout: CalloutItem): string {
@@ -853,7 +883,7 @@ class CalloutOrganizerView extends ItemView {
     }
 
 
-    async addBlockIdToCallout(callout: CalloutItem, blockId: string): Promise<void> {
+    async addCalloutIdToCallout(callout: CalloutItem, calloutID: string): Promise<void> {
         try {
             const file = this.app.vault.getAbstractFileByPath(callout.file);
             if (!(file instanceof TFile)) {
@@ -966,8 +996,8 @@ class CalloutOrganizerView extends ItemView {
                 }
                 
                 if (!hasBlockId) {
-                    // Add the block ID as a new line at the end of the callout
-                    lines.splice(lastCalloutLineIndex + 1, 0, `> ^${blockId}`);
+                    // Add the callout ID as a new line at the end of the callout
+                    lines.splice(lastCalloutLineIndex + 1, 0, `> ^${calloutID}`);
                     
                     // Add empty line after the callout if there isn't one
                     if (lastCalloutLineIndex + 2 < lines.length && lines[lastCalloutLineIndex + 2].trim() !== '') {
@@ -981,12 +1011,12 @@ class CalloutOrganizerView extends ItemView {
                     await this.app.vault.modify(file, lines.join('\n'));
                     
                     // Update the callout cache to reflect the change
-                    callout.blockId = blockId;
+                    callout.calloutID = calloutID;
                 }
             }
         } catch (error) {
-            console.error('Error adding block ID to callout:', error);
-            new Notice('Failed to add block ID to callout');
+            console.error('Error adding callout ID to callout:', error);
+            new Notice('Failed to add callout ID to callout');
         }
     }
 
@@ -1181,7 +1211,7 @@ export default class CalloutOrganizerPlugin extends Plugin {
     static readonly CONTENT_EXTRACT_REGEX = /^>\s?/;
     
     // Cache constants
-    static readonly CACHE_VERSION = "1.0";
+    static readonly CACHE_VERSION = "1.3";
     static readonly PLUGIN_FOLDER = "callout-organizer";
     static readonly CACHE_FILENAME = "callouts.json";
     
@@ -1591,7 +1621,13 @@ export default class CalloutOrganizerPlugin extends Plugin {
             const cache = await this.loadCalloutCache();
             if (cache && await this.isCacheValid(cache)) {
                 console.log(`✅ Using cached callouts: ${cache.callouts.length} items`);
-                return cache.callouts;
+                // Sort callouts by modification time (recent first) for search mode
+                const sortedCallouts = [...cache.callouts].sort((a, b) => {
+                    const aModTime = a.calloutModifyTime || a.fileModTime || '1970-01-01 00:00:00';
+                    const bModTime = b.calloutModifyTime || b.fileModTime || '1970-01-01 00:00:00';
+                    return readableToTimestamp(bModTime) - readableToTimestamp(aModTime);
+                });
+                return sortedCallouts;
             } else {
                 console.log('❌ Cache invalid or not found, will scan files');
             }
@@ -1669,11 +1705,26 @@ export default class CalloutOrganizerPlugin extends Plugin {
         );
     }
 
+    // Create a unique signature for a callout to track its creation time
+    private createCalloutSignature(filePath: string, calloutID?: string): string {
+        // If callout has an ID, use file + calloutID for unique identification
+        if (calloutID) {
+            return `${filePath}:${calloutID}`;
+        }
+        // Fallback: generate a temporary ID based on file hash and timestamp
+        // This will be replaced with a real calloutID when the callout gets one
+        const tempId = `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        return `${filePath}:${tempId}`;
+    }
+
     async extractCalloutsFromFile(file: TFile): Promise<CalloutItem[]> {
         const content = await this.app.vault.read(file);
         const lines = content.split('\n');
         const callouts: CalloutItem[] = [];
         const fileModTime = file.stat.mtime;
+        
+        // Load existing cache to get creation times
+        const existingCache = await this.loadCalloutCache();
         
         // Use static regex patterns for better performance
         const headingRegex = CalloutOrganizerPlugin.HEADING_REGEX;
@@ -1711,7 +1762,7 @@ export default class CalloutOrganizerPlugin extends Plugin {
                 
                 const title = calloutMatch[2].trim();
                 const contentLines: string[] = [];
-                let blockId = '';
+                let calloutID = '';
                 
                 // Extract callout content
                 let j = i + 1;
@@ -1730,10 +1781,10 @@ export default class CalloutOrganizerPlugin extends Plugin {
                         // This is regular callout content
                         const contentLine = nextLine.replace(/^>\s?/, '');
                         
-                        // Check for block ID
+                        // Check for callout ID
                         const blockMatch = contentLine.match(blockIdRegex);
                         if (blockMatch) {
-                            blockId = blockMatch[1];
+                            calloutID = blockMatch[1];
                             const cleanContent = contentLine.replace(/\s*\^[\w-]+\s*$/, '');
                             if (cleanContent) contentLines.push(cleanContent);
                         } else {
@@ -1763,18 +1814,77 @@ export default class CalloutOrganizerPlugin extends Plugin {
                     hierarchy.push(heading);
                 }
                 
-                // Create callout item with optimized content joining
+                // Create callout signature for time tracking
+                // If callout has an ID, use that for tracking, otherwise use content-based fallback
+                let calloutSignature: string;
+                if (calloutID) {
+                    calloutSignature = this.createCalloutSignature(file.path, calloutID);
+                } else {
+                    // Fallback to content-based signature for callouts without IDs
+                    calloutSignature = `${file.path}:${currentLineNumber}:${type}:${title}`;
+                }
+                
+                const currentTime = Date.now();
+                const currentReadableTime = timestampToReadable(currentTime);
+                const fileModTimeReadable = timestampToReadable(fileModTime);
+                
+                // Create preliminary callout item for comparison
+                const preliminaryCallout: CalloutItem = {
+                    file: file.path,
+                    type,
+                    title,
+                    content: contentLines.join('\n').trim(),
+                    lineNumber: currentLineNumber,
+                    fileModTime: fileModTimeReadable
+                };
+                
+                // Determine creation and modification times with smart change detection
+                let creationTime: string;
+                let modificationTime: string;
+                
+                if (calloutID) {
+                    // For callouts with IDs: use proper time tracking
+                    if (existingCache?.calloutCreationTimes?.[calloutSignature]) {
+                        // This callout already exists, keep the original creation time
+                        creationTime = existingCache.calloutCreationTimes[calloutSignature];
+                        
+                        // Find existing callout to compare content
+                        const existingCallout = existingCache.callouts?.find(c => 
+                            c.calloutID === calloutID && c.file === file.path
+                        );
+                        
+                        if (existingCallout && hasCalloutChanged(preliminaryCallout, existingCallout)) {
+                            // Content has changed, update modification time
+                            modificationTime = currentReadableTime;
+                        } else {
+                            // Content hasn't changed, keep existing modification time
+                            modificationTime = existingCallout?.calloutModifyTime || currentReadableTime;
+                        }
+                    } else {
+                        // New callout with ID
+                        creationTime = currentReadableTime;
+                        modificationTime = currentReadableTime;
+                    }
+                } else {
+                    // For callouts without IDs: use fileModTime for both created and modified times
+                    creationTime = fileModTimeReadable;
+                    modificationTime = fileModTimeReadable;
+                }
+                
+                // Create final callout item
                 const calloutItem: CalloutItem = {
                     file: file.path,
                     type,
                     title,
                     content: contentLines.join('\n').trim(),
                     lineNumber: currentLineNumber,
-                    fileModTime: fileModTime
+                    fileModTime: fileModTimeReadable,
+                    calloutCreatedTime: creationTime,
+                    calloutModifyTime: modificationTime
                 };
                 
                 // Add optional properties only if they exist to save memory
-                if (blockId) calloutItem.blockId = blockId;
+                if (calloutID) calloutItem.calloutID = calloutID;
                 if (hierarchy.length > 0) {
                     calloutItem.headers = hierarchy.map(h => h.title);
                     calloutItem.headerLevels = hierarchy.map(h => h.level);
@@ -1820,6 +1930,54 @@ export default class CalloutOrganizerPlugin extends Plugin {
             const cacheContent = fs.readFileSync(cachePath, 'utf8');
             const cache: CalloutCache = JSON.parse(cacheContent);
 
+            // Backward compatibility: ensure calloutCreationTimes exists and convert old numeric timestamps
+            if (!cache.calloutCreationTimes) {
+                cache.calloutCreationTimes = {};
+            } else {
+                // Convert old numeric timestamps to readable format
+                const convertedTimes: Record<string, string> = {};
+                for (const [signature, time] of Object.entries(cache.calloutCreationTimes)) {
+                    if (typeof time === 'number') {
+                        // Old format: numeric timestamp
+                        convertedTimes[signature] = timestampToReadable(time);
+                    } else {
+                        // New format: already readable
+                        convertedTimes[signature] = time as string;
+                    }
+                }
+                cache.calloutCreationTimes = convertedTimes;
+            }
+
+            // Convert old numeric timestamps to readable format
+            if (cache.fileModTimes) {
+                const convertedFileModTimes: Record<string, string> = {};
+                for (const [filePath, time] of Object.entries(cache.fileModTimes)) {
+                    if (typeof time === 'number') {
+                        // Old format: numeric timestamp
+                        convertedFileModTimes[filePath] = timestampToReadable(time);
+                    } else {
+                        // New format: already readable
+                        convertedFileModTimes[filePath] = time as string;
+                    }
+                }
+                cache.fileModTimes = convertedFileModTimes;
+            }
+
+            // Convert old numeric timestamps in callouts to readable format
+            if (cache.callouts) {
+                for (const callout of cache.callouts) {
+                    if (callout.fileModTime && typeof callout.fileModTime === 'number') {
+                        callout.fileModTime = timestampToReadable(callout.fileModTime as any);
+                    }
+                    if (callout.calloutCreatedTime && typeof callout.calloutCreatedTime === 'number') {
+                        callout.calloutCreatedTime = timestampToReadable(callout.calloutCreatedTime as any);
+                    }
+                    if (callout.calloutModifyTime && typeof callout.calloutModifyTime === 'number') {
+                        callout.calloutModifyTime = timestampToReadable(callout.calloutModifyTime as any);
+                    }
+                }
+            }
+
             // Validate cache version and vault path
             if (cache.version !== CalloutOrganizerPlugin.CACHE_VERSION) {
                 console.log('Cache version mismatch, invalidating cache');
@@ -1849,13 +2007,28 @@ export default class CalloutOrganizerPlugin extends Plugin {
         console.log(`Attempting to save ${callouts.length} callouts to cache...`);
 
         try {
-            // Collect file modification times
-            const fileModTimes: Record<string, number> = {};
+            // Collect file modification times in readable format
+            const fileModTimes: Record<string, string> = {};
             const files = this.app.vault.getMarkdownFiles();
             
             for (const file of files) {
                 if (!this.shouldSkipFile(file.path, true)) {
-                    fileModTimes[file.path] = file.stat.mtime;
+                    fileModTimes[file.path] = timestampToReadable(file.stat.mtime);
+                }
+            }
+
+            // Extract callout creation times from callouts
+            const calloutCreationTimes: Record<string, string> = {};
+            for (const callout of callouts) {
+                if (callout.calloutCreatedTime) {
+                    let signature: string;
+                    if (callout.calloutID) {
+                        signature = this.createCalloutSignature(callout.file, callout.calloutID);
+                    } else {
+                        // Fallback to content-based signature for callouts without IDs
+                        signature = `${callout.file}:${callout.lineNumber}:${callout.type}:${callout.title}`;
+                    }
+                    calloutCreationTimes[signature] = callout.calloutCreatedTime!;
                 }
             }
 
@@ -1864,7 +2037,8 @@ export default class CalloutOrganizerPlugin extends Plugin {
                 timestamp: Date.now(),
                 vaultPath: this.app.vault.getName() || '',
                 callouts,
-                fileModTimes
+                fileModTimes,
+                calloutCreationTimes
             };
 
             // Save directly to plugin folder using filesystem
@@ -1901,7 +2075,7 @@ export default class CalloutOrganizerPlugin extends Plugin {
             for (const [filePath, cachedModTime] of Object.entries(cache.fileModTimes)) {
                 const file = this.app.vault.getAbstractFileByPath(filePath);
                 if (file instanceof TFile) {
-                    if (file.stat.mtime > cachedModTime) {
+                    if (file.stat.mtime > readableToTimestamp(cachedModTime)) {
                         console.log(`File ${filePath} has been modified, cache invalid`);
                         return false;
                     }

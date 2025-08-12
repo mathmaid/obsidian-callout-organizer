@@ -184,6 +184,38 @@ MIT License - see LICENSE file for details
 
 ## Changelog
 
+### Version 1.2.1
+- 🐛 **Bug Fixes**:
+  - Fixed sorting in search mode to properly show recently modified callouts at the top
+  - Enhanced cache loading to respect modification time ordering
+  - Improved sort logic with better fallback mechanisms for callouts without modification times
+- 🔧 **Technical Improvements**:
+  - Updated cache loading logic to apply sorting when retrieving cached callouts
+  - Enhanced sorting robustness with fallback chain: `calloutModifyTime` → `fileModTime` → default timestamp
+  - Fixed both grouped and ungrouped callout rendering to use consistent sorting
+
+### Version 1.2.0
+- 🎉 **Major New Features**:
+  - **Smart Time Tracking**: Added intelligent creation and modification time tracking for callouts
+  - **Human-Readable Timestamps**: All times now use YYYY-MM-DD HH:mm:ss format instead of Unix timestamps
+  - **Intelligent Change Detection**: Only updates modification times when callout content actually changes
+  - **Improved calloutID System**: Renamed blockId to calloutID for better semantic clarity
+  - **Smart File Change Handling**: Distinguishes between file changes and actual callout content changes
+- ✨ **Enhanced Time Logic**:
+  - **Callouts with IDs**: Robust time tracking that preserves creation times and only updates modification times when content changes
+  - **Callouts without IDs**: Synchronized with file modification times for logical behavior
+  - **Backward Compatibility**: Automatically converts old timestamp formats to readable format
+- 🔧 **Technical Improvements**:
+  - Added smart caching with content comparison for better performance
+  - Enhanced cache validation with file modification time checks
+  - Improved callout identification using file + calloutID signatures
+  - Better error handling and type safety throughout the codebase
+- 🐛 **Bug Fixes**:
+  - Fixed null/undefined property access issues
+  - Improved error handling in math rendering
+  - Enhanced type checking for better reliability
+  - Fixed sorting functions to work with new readable timestamp format
+
 ### Version 1.1.1
 - 🐛 **Bug Fixes**:
   - Fixed search functionality to properly detect callouts in all files
