@@ -94,6 +94,8 @@ var CalloutOrganizerView = class extends import_obsidian.ItemView {
     this.RENDER_BATCH_SIZE = 20;
     // Batch DOM operations
     this.MIN_RENDER_INTERVAL = 100;
+    // DOM element cache for performance
+    this.cachedTypeSelectorContainer = null;
     // Performance optimization: cache DOM elements
     this.topBarElement = null;
     this.calloutContainerElement = null;
@@ -134,9 +136,11 @@ var CalloutOrganizerView = class extends import_obsidian.ItemView {
       }
     }
     await this.detectAndAddNewCalloutTypes();
-    const typeSelectors = this.containerEl.querySelector(".callout-type-selectors");
-    if (typeSelectors) {
-      this.setupTypeSelectors(typeSelectors);
+    if (!this.cachedTypeSelectorContainer) {
+      this.cachedTypeSelectorContainer = this.containerEl.querySelector(".callout-type-selectors");
+    }
+    if (this.cachedTypeSelectorContainer) {
+      this.setupTypeSelectors(this.cachedTypeSelectorContainer);
     }
     const container = this.containerEl.querySelector(".callout-container");
     if (container) {
@@ -879,12 +883,9 @@ var CalloutOrganizerView = class extends import_obsidian.ItemView {
       clearTimeout(this.searchDebounceTimer);
       this.searchDebounceTimer = null;
     }
-    if (this.topBarElement) {
-      this.topBarElement = null;
-    }
-    if (this.calloutContainerElement) {
-      this.calloutContainerElement = null;
-    }
+    this.cachedTypeSelectorContainer = null;
+    this.topBarElement = null;
+    this.calloutContainerElement = null;
     this.callouts = [];
     this.activeFilters.clear();
     (_a = this.component) == null ? void 0 : _a.unload();
@@ -893,6 +894,7 @@ var CalloutOrganizerView = class extends import_obsidian.ItemView {
 var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
   constructor() {
     super(...arguments);
+    this.cacheOperationLock = null;
     this.styleElement = null;
   }
   async onload() {
@@ -1533,23 +1535,29 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
     if (!this.settings.enableFileCache) {
       return null;
     }
+    if (this.cacheOperationLock) {
+      await this.cacheOperationLock;
+    }
     try {
-      const fs = require("fs");
-      const path = require("path");
+      const cacheFilePath = this.getCacheFilePath();
+      console.log(`Attempting to load cache from: ${cacheFilePath}`);
       const adapter = this.app.vault.adapter;
-      if (!(adapter == null ? void 0 : adapter.basePath)) {
-        console.warn("Unable to access vault adapter base path");
-        return null;
-      }
-      const dataDir = adapter.basePath;
-      const cachePath = path.join(dataDir, ".obsidian", "plugins", _CalloutOrganizerPlugin.PLUGIN_FOLDER, _CalloutOrganizerPlugin.CACHE_FILENAME);
-      console.log(`Attempting to load cache from: ${cachePath}`);
-      if (!fs.existsSync(cachePath)) {
+      const exists = await adapter.exists(cacheFilePath);
+      if (!exists) {
         console.log("Cache file does not exist");
         return null;
       }
-      const cacheContent = fs.readFileSync(cachePath, "utf8");
-      const cache = JSON.parse(cacheContent);
+      const cacheContent = await adapter.read(cacheFilePath);
+      let cache;
+      try {
+        cache = JSON.parse(cacheContent);
+        if (!cache || typeof cache !== "object" || !Array.isArray(cache.callouts)) {
+          throw new Error("Invalid cache structure");
+        }
+      } catch (parseError) {
+        console.warn("Failed to parse cache file, will regenerate:", parseError);
+        return null;
+      }
       if (!cache.calloutCreationTimes) {
         cache.calloutCreationTimes = {};
       } else {
@@ -1609,52 +1617,55 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
       return false;
     }
     console.log(`Attempting to save ${callouts.length} callouts to cache...`);
-    try {
-      const fileModTimes = {};
-      const files = this.app.vault.getMarkdownFiles();
-      for (const file of files) {
-        if (!this.shouldSkipFile(file.path, true)) {
-          fileModTimes[file.path] = timestampToReadable(file.stat.mtime);
-        }
-      }
-      const calloutCreationTimes = {};
-      for (const callout of callouts) {
-        if (callout.calloutCreatedTime) {
-          let signature;
-          if (callout.calloutID) {
-            signature = this.createCalloutSignature(callout.file, callout.calloutID);
-          } else {
-            signature = `${callout.file}:${callout.lineNumber}:${callout.type}:${callout.title}`;
+    const saveOperation = async () => {
+      try {
+        const fileModTimes = {};
+        const files = this.app.vault.getMarkdownFiles();
+        for (const file of files) {
+          if (!this.shouldSkipFile(file.path, true)) {
+            fileModTimes[file.path] = timestampToReadable(file.stat.mtime);
           }
-          calloutCreationTimes[signature] = callout.calloutCreatedTime;
         }
-      }
-      const cache = {
-        version: _CalloutOrganizerPlugin.CACHE_VERSION,
-        timestamp: Date.now(),
-        vaultPath: this.app.vault.getName() || "",
-        callouts,
-        fileModTimes,
-        calloutCreationTimes
-      };
-      const fs = require("fs");
-      const path = require("path");
-      const adapter = this.app.vault.adapter;
-      if (!(adapter == null ? void 0 : adapter.basePath)) {
-        console.warn("Unable to access vault adapter base path");
+        const calloutCreationTimes = {};
+        for (const callout of callouts) {
+          if (callout.calloutCreatedTime) {
+            let signature;
+            if (callout.calloutID) {
+              signature = this.createCalloutSignature(callout.file, callout.calloutID);
+            } else {
+              signature = `${callout.file}:${callout.lineNumber}:${callout.type}:${callout.title}`;
+            }
+            calloutCreationTimes[signature] = callout.calloutCreatedTime;
+          }
+        }
+        const cache = {
+          version: _CalloutOrganizerPlugin.CACHE_VERSION,
+          timestamp: Date.now(),
+          vaultPath: this.app.vault.getName() || "",
+          callouts,
+          fileModTimes,
+          calloutCreationTimes
+        };
+        const cacheFilePath = this.getCacheFilePath();
+        const cacheContent = JSON.stringify(cache, null, 2);
+        console.log(`Saving cache to: ${cacheFilePath}`);
+        const adapter = this.app.vault.adapter;
+        const pluginDir = `.obsidian/plugins/${_CalloutOrganizerPlugin.PLUGIN_FOLDER}`;
+        if (!await adapter.exists(pluginDir)) {
+          await adapter.mkdir(pluginDir);
+        }
+        await adapter.write(cacheFilePath, cacheContent);
+        console.log("\u2705 Cache file saved successfully to plugin folder");
+        return true;
+      } catch (error) {
+        console.error("Failed to save callout cache:", error);
         return false;
       }
-      const dataDir = adapter.basePath;
-      const cacheFilePath = path.join(dataDir, ".obsidian", "plugins", _CalloutOrganizerPlugin.PLUGIN_FOLDER, _CalloutOrganizerPlugin.CACHE_FILENAME);
-      const cacheContent = JSON.stringify(cache, null, 2);
-      console.log(`Saving cache to: ${cacheFilePath}`);
-      fs.writeFileSync(cacheFilePath, cacheContent, "utf8");
-      console.log("\u2705 Cache file saved successfully to plugin folder");
-      return true;
-    } catch (error) {
-      console.error("Failed to save callout cache:", error);
-      return false;
-    }
+    };
+    this.cacheOperationLock = saveOperation();
+    const result = await this.cacheOperationLock;
+    this.cacheOperationLock = null;
+    return result;
   }
   async isCacheValid(cache) {
     if (!cache || !this.settings.enableFileCache) {
@@ -1692,6 +1703,12 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
       this.styleElement.remove();
       this.styleElement = null;
     }
+    const highlightStyle = document.getElementById("callout-organizer-highlight-style");
+    if (highlightStyle) {
+      highlightStyle.remove();
+    }
+    const highlights = document.querySelectorAll(".callout-organizer-highlight");
+    highlights.forEach((el) => el.remove());
   }
   async loadSettings() {
     this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
@@ -1735,17 +1752,10 @@ var CalloutOrganizerSettingTab = class extends import_obsidian.PluginSettingTab 
             await this.app.vault.delete(cacheFile);
             console.log("Cache file deleted via Obsidian API");
           }
-          const fs = require("fs");
-          const path = require("path");
           const adapter = this.app.vault.adapter;
-          if (!(adapter == null ? void 0 : adapter.basePath)) {
-            console.warn("Unable to access vault adapter base path");
-            return null;
-          }
-          const dataDir = adapter.basePath;
-          const pluginCachePath = path.join(dataDir, ".obsidian", "plugins", "callout-organizer", "callouts.json");
-          if (fs.existsSync(pluginCachePath)) {
-            fs.unlinkSync(pluginCachePath);
+          const pluginCachePath = this.plugin.getCacheFilePath();
+          if (await adapter.exists(pluginCachePath)) {
+            await adapter.remove(pluginCachePath);
             console.log("Plugin folder cache file also deleted");
           }
         } catch (error) {

@@ -197,6 +197,14 @@
     "noted": {
       "color": "#086ddd",
       "icon": "pencil"
+    },
+    "eeeee": {
+      "color": "#086ddd",
+      "icon": "pencil"
+    },
+    "test": {
+      "color": "#086ddd",
+      "icon": "pencil"
     }
   },
   "cacheFileName": "callouts.json",
