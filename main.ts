@@ -1692,7 +1692,9 @@ export default class CalloutOrganizerPlugin extends Plugin {
             return [];
         }
         
-        return await this.extractCalloutsFromFile(activeFile);
+        // Load cache once for current file extraction
+        const existingCache = await this.loadCalloutCache();
+        return await this.extractCalloutsFromFile(activeFile, existingCache);
     }
 
     async extractAllCallouts(): Promise<CalloutItem[]> {
@@ -1742,9 +1744,12 @@ export default class CalloutOrganizerPlugin extends Plugin {
         const currentFile = this.app.workspace.getActiveFile();
         const processedFiles = new Set<string>();
         
+        // Load existing cache once for all files (performance fix)
+        const existingCache = await this.loadCalloutCache();
+        
         // Always process current file first to ensure it's included in search results
         if (currentFile && currentFile.path.endsWith('.md')) {
-            const currentFileCallouts = await this.extractCalloutsFromFile(currentFile);
+            const currentFileCallouts = await this.extractCalloutsFromFile(currentFile, existingCache);
             callouts.push(...currentFileCallouts);
             processedFiles.add(currentFile.path);
         }
@@ -1754,7 +1759,7 @@ export default class CalloutOrganizerPlugin extends Plugin {
             // Skip if already processed (current file) or should be excluded
             if (processedFiles.has(file.path) || this.shouldSkipFile(file.path, true)) continue;
             
-            const fileCallouts = await this.extractCalloutsFromFile(file);
+            const fileCallouts = await this.extractCalloutsFromFile(file, existingCache);
             callouts.push(...fileCallouts);
             processedFiles.add(file.path);
         }
@@ -1800,14 +1805,16 @@ export default class CalloutOrganizerPlugin extends Plugin {
         return `${filePath}:${tempId}`;
     }
 
-    async extractCalloutsFromFile(file: TFile): Promise<CalloutItem[]> {
+    async extractCalloutsFromFile(file: TFile, existingCache?: CalloutCache | null): Promise<CalloutItem[]> {
         const content = await this.app.vault.read(file);
         const lines = content.split('\n');
         const callouts: CalloutItem[] = [];
         const fileModTime = file.stat.mtime;
         
-        // Load existing cache to get creation times
-        const existingCache = await this.loadCalloutCache();
+        // Use provided cache or load it if not provided (for backward compatibility)
+        if (existingCache === undefined) {
+            existingCache = await this.loadCalloutCache();
+        }
         
         // Use static regex patterns for better performance
         const headingRegex = CalloutOrganizerPlugin.HEADING_REGEX;

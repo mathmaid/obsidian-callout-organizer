@@ -1313,7 +1313,8 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
     if (!activeFile || !activeFile.path.endsWith(".md")) {
       return [];
     }
-    return await this.extractCalloutsFromFile(activeFile);
+    const existingCache = await this.loadCalloutCache();
+    return await this.extractCalloutsFromFile(activeFile, existingCache);
   }
   async extractAllCallouts() {
     console.log("=== extractAllCallouts called ===");
@@ -1352,15 +1353,16 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
     const files = this.app.vault.getMarkdownFiles();
     const currentFile = this.app.workspace.getActiveFile();
     const processedFiles = /* @__PURE__ */ new Set();
+    const existingCache = await this.loadCalloutCache();
     if (currentFile && currentFile.path.endsWith(".md")) {
-      const currentFileCallouts = await this.extractCalloutsFromFile(currentFile);
+      const currentFileCallouts = await this.extractCalloutsFromFile(currentFile, existingCache);
       callouts.push(...currentFileCallouts);
       processedFiles.add(currentFile.path);
     }
     for (const file of files) {
       if (processedFiles.has(file.path) || this.shouldSkipFile(file.path, true))
         continue;
-      const fileCallouts = await this.extractCalloutsFromFile(file);
+      const fileCallouts = await this.extractCalloutsFromFile(file, existingCache);
       callouts.push(...fileCallouts);
       processedFiles.add(file.path);
     }
@@ -1393,13 +1395,15 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
     const tempId = `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     return `${filePath}:${tempId}`;
   }
-  async extractCalloutsFromFile(file) {
+  async extractCalloutsFromFile(file, existingCache) {
     var _a, _b;
     const content = await this.app.vault.read(file);
     const lines = content.split("\n");
     const callouts = [];
     const fileModTime = file.stat.mtime;
-    const existingCache = await this.loadCalloutCache();
+    if (existingCache === void 0) {
+      existingCache = await this.loadCalloutCache();
+    }
     const headingRegex = _CalloutOrganizerPlugin.HEADING_REGEX;
     const calloutRegex = _CalloutOrganizerPlugin.CALLOUT_REGEX;
     const blockIdRegex = _CalloutOrganizerPlugin.BLOCK_ID_REGEX;
