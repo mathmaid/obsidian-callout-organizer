@@ -120,29 +120,48 @@ var CalloutOrganizerView = class extends import_obsidian.ItemView {
     this.setupTopBar(topBar);
     const calloutContainer = container.createEl("div", { cls: "callout-container" });
     this.renderCallouts(calloutContainer);
-    this.registerEvent(this.app.workspace.on("active-leaf-change", () => {
-      if (this.searchMode === "current") {
-        this.refreshCallouts();
-      }
-    }));
-    this.registerEvent(this.app.vault.on("modify", () => {
-      if (this.searchMode === "search") {
-        console.log("File modified, cache will be validated on next access");
-      }
-    }));
     await this.refreshCallouts();
   }
   async refreshCallouts() {
     if (this.searchMode === "current") {
       this.callouts = await this.plugin.extractCurrentFileCallouts();
     } else if (this.searchMode === "search") {
-      console.log("Refreshing search mode callouts...");
-      this.callouts = await this.plugin.extractAllCallouts();
-      console.log(`Loaded ${this.callouts.length} callouts for search mode`);
+      const cache = await this.plugin.loadCalloutCache();
+      if (cache && cache.callouts) {
+        this.callouts = cache.callouts;
+      } else {
+        this.callouts = [];
+      }
+    }
+    await this.detectAndAddNewCalloutTypes();
+    const typeSelectors = this.containerEl.querySelector(".callout-type-selectors");
+    if (typeSelectors) {
+      this.setupTypeSelectors(typeSelectors);
     }
     const container = this.containerEl.querySelector(".callout-container");
     if (container) {
       await this.renderCallouts(container);
+    }
+  }
+  // Helper method to detect and add new callout types to settings
+  async detectAndAddNewCalloutTypes() {
+    var _a, _b;
+    const currentTypes = new Set(this.callouts.map((c) => c.type.toLowerCase().trim()));
+    let settingsChanged = false;
+    for (const type of currentTypes) {
+      if (!this.plugin.settings.calloutColors[type]) {
+        const noteColor = ((_a = this.plugin.settings.calloutColors["note"]) == null ? void 0 : _a.color) || "#086DDD";
+        const noteIcon = ((_b = this.plugin.settings.calloutColors["note"]) == null ? void 0 : _b.icon) || "pencil";
+        this.plugin.settings.calloutColors[type] = {
+          color: noteColor,
+          icon: noteIcon
+        };
+        settingsChanged = true;
+      }
+    }
+    if (settingsChanged) {
+      await this.plugin.saveSettings();
+      this.plugin.injectCustomCalloutCSS();
     }
   }
   async getHeadingHierarchy(callout) {
@@ -270,14 +289,13 @@ var CalloutOrganizerView = class extends import_obsidian.ItemView {
     (0, import_obsidian.setIcon)(refreshBtn, "refresh-cw");
     refreshBtn.onclick = async () => {
       if (this.searchMode === "search") {
-        this.callouts = await this.plugin.refreshAllCallouts();
-        const container2 = this.containerEl.querySelector(".callout-container");
-        if (container2) {
-          await this.renderCallouts(container2);
-        }
+        await this.plugin.refreshAllCallouts();
+        await this.refreshCallouts();
+        console.log("Callouts refreshed and saved to JSON file!");
       } else {
         await this.plugin.refreshAllCallouts();
         await this.refreshCallouts();
+        console.log("Current file callouts refreshed! Cache updated.");
       }
     };
     const secondLine = container.createEl("div", { cls: "callout-top-bar-line-2" });
@@ -319,14 +337,14 @@ var CalloutOrganizerView = class extends import_obsidian.ItemView {
       };
     }
     uniqueTypes.forEach((type) => {
-      var _a;
+      var _a, _b;
       const button = container.createEl("button", {
         cls: `callout-type-selector callout-filter-${type}`
       });
-      const iconName = (_a = this.plugin.settings.calloutColors[type]) == null ? void 0 : _a.icon;
+      const iconName = ((_a = this.plugin.settings.calloutColors[type]) == null ? void 0 : _a.icon) || ((_b = this.plugin.settings.calloutColors["note"]) == null ? void 0 : _b.icon) || "pencil";
       if (iconName && iconName !== "none") {
         const iconEl = button.createEl("span", { cls: "callout-type-icon" });
-        if (type === "note" && iconName === "pencil") {
+        if (type === "note" && iconName === "pencil" || iconName === "pencil") {
           iconEl.innerHTML = OBSIDIAN_NOTE_ICON_SVG;
         } else {
           (0, import_obsidian.setIcon)(iconEl, iconName);
@@ -412,7 +430,7 @@ var CalloutOrganizerView = class extends import_obsidian.ItemView {
     container.empty();
     const totalCallouts = this.callouts.length;
     const location = this.searchMode === "search" ? "the vault" : "current file";
-    const ghostPrompt = container.createEl("div", { 
+    const ghostPrompt = container.createEl("div", {
       text: `There are ${totalCallouts} callouts in ${location}`,
       cls: "callout-count-ghost-prompt"
     });
@@ -464,7 +482,7 @@ var CalloutOrganizerView = class extends import_obsidian.ItemView {
     await this.renderCalloutsList(container);
   }
   async renderSingleCallout(container, callout) {
-    var _a, _b, _c, _d;
+    var _a, _b, _c, _d, _e, _f;
     const calloutEl = container.createEl("div", { cls: "callout-organizer-item" });
     calloutEl.addClass("callout");
     calloutEl.setAttr("data-callout", callout.type);
@@ -520,11 +538,11 @@ var CalloutOrganizerView = class extends import_obsidian.ItemView {
       const titleEl = header.createEl("span", {
         cls: "callout-organizer-title"
       });
-      const calloutColor = ((_a = this.plugin.settings.calloutColors[callout.type]) == null ? void 0 : _a.color) || "var(--callout-title-color)";
-      const iconName = (_b = this.plugin.settings.calloutColors[callout.type]) == null ? void 0 : _b.icon;
+      const calloutColor = ((_a = this.plugin.settings.calloutColors[callout.type]) == null ? void 0 : _a.color) || ((_b = this.plugin.settings.calloutColors["note"]) == null ? void 0 : _b.color) || "var(--callout-title-color)";
+      const iconName = ((_c = this.plugin.settings.calloutColors[callout.type]) == null ? void 0 : _c.icon) || ((_d = this.plugin.settings.calloutColors["note"]) == null ? void 0 : _d.icon) || "pencil";
       if (iconName && iconName !== "none") {
         const iconEl = titleEl.createEl("span", { cls: "callout-title-icon" });
-        if (callout.type === "note" && iconName === "pencil") {
+        if (callout.type === "note" && iconName === "pencil" || iconName === "pencil") {
           iconEl.innerHTML = OBSIDIAN_NOTE_ICON_SVG;
         } else {
           (0, import_obsidian.setIcon)(iconEl, iconName);
@@ -548,8 +566,8 @@ var CalloutOrganizerView = class extends import_obsidian.ItemView {
     });
     const breadcrumb = calloutEl.createEl("div", { cls: "callout-organizer-breadcrumb" });
     if (this.plugin.settings.showFilenames) {
-      const fileParts = (_c = callout.file) == null ? void 0 : _c.split("/");
-      const filename = ((_d = fileParts == null ? void 0 : fileParts.pop()) == null ? void 0 : _d.replace(/\.md$/, "")) || callout.file || "Unknown";
+      const fileParts = (_e = callout.file) == null ? void 0 : _e.split("/");
+      const filename = ((_f = fileParts == null ? void 0 : fileParts.pop()) == null ? void 0 : _f.replace(/\.md$/, "")) || callout.file || "Unknown";
       const fileLink = breadcrumb.createEl("a", {
         text: filename,
         href: "#",
@@ -908,13 +926,39 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
         }
       }
     });
+    this.addCommand({
+      id: "reinitialize-callout-colors",
+      name: "Reinitialize Callout Colors",
+      callback: async () => {
+        console.log("=== Reinitializing Callout Colors ===");
+        await this.initializeCalloutColors();
+        this.injectCustomCalloutCSS();
+        console.log("Callout colors reinitialized!");
+        const view = this.getCalloutView();
+        if (view) {
+          await view.refreshCallouts();
+        }
+      }
+    });
+    this.addCommand({
+      id: "force-css-injection",
+      name: "Force CSS Injection",
+      callback: () => {
+        console.log("=== Forcing CSS Injection ===");
+        console.log("Current callout settings:", this.settings.calloutColors);
+        this.injectCustomCalloutCSS();
+        console.log("CSS injection forced! Check console for details.");
+      }
+    });
     this.addSettingTab(new CalloutOrganizerSettingTab(this.app, this));
     await this.initializeCalloutColors();
     this.injectCustomCalloutCSS();
   }
   async initializeCalloutColors() {
     try {
-      const detectedTypes = await this.getAllCalloutTypesInVault();
+      const vaultTypes = await this.getAllCalloutTypesInVault();
+      const cachedTypes = await this.getAllCalloutTypesFromCache();
+      const detectedTypes = /* @__PURE__ */ new Set([...vaultTypes, ...cachedTypes]);
       let settingsChanged = false;
       for (const type of detectedTypes) {
         if (!this.settings.calloutColors[type]) {
@@ -950,6 +994,18 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
       return `${parseInt(result[1], 16)},${parseInt(result[2], 16)},${parseInt(result[3], 16)}`;
     }
     return "0,0,0";
+  }
+  // Get callout types from cached JSON data
+  async getAllCalloutTypesFromCache() {
+    const calloutTypes = /* @__PURE__ */ new Set();
+    const cache = await this.loadCalloutCache();
+    if (cache && cache.callouts) {
+      for (const callout of cache.callouts) {
+        calloutTypes.add(callout.type.toLowerCase().trim());
+      }
+    } else {
+    }
+    return calloutTypes;
   }
   async getAllCalloutTypesInVault() {
     const calloutTypes = /* @__PURE__ */ new Set();
@@ -1876,7 +1932,9 @@ var CalloutOrganizerSettingTab = class extends import_obsidian.PluginSettingTab 
   async createDynamicCalloutColorSettings(container) {
     const loadingEl = container.createEl("p", { text: "Scanning vault for callout types...", cls: "setting-item-description" });
     try {
-      const detectedTypes = await this.plugin.getAllCalloutTypesInVault();
+      const vaultTypes = await this.plugin.getAllCalloutTypesInVault();
+      const cachedTypes = await this.plugin.getAllCalloutTypesFromCache();
+      const detectedTypes = /* @__PURE__ */ new Set([...vaultTypes, ...cachedTypes]);
       const sortedTypes = Array.from(detectedTypes).sort();
       loadingEl.remove();
       if (sortedTypes.length === 0) {

@@ -177,37 +177,63 @@ class CalloutOrganizerView extends ItemView {
         const calloutContainer = container.createEl("div", { cls: "callout-container" });
         this.renderCallouts(calloutContainer);
         
-        // Listen for active file changes (only refresh if in current file mode)
-        this.registerEvent(this.app.workspace.on('active-leaf-change', () => {
-            if (this.searchMode === 'current') {
-                this.refreshCallouts();
-            }
-        }));
-        
-        // Listen for file changes to refresh callouts
-        this.registerEvent(this.app.vault.on('modify', () => {
-            if (this.searchMode === 'search') {
-                // File cache will handle invalidation internally
-                console.log('File modified, cache will be validated on next access');
-            }
-        }));
+        // Auto-refresh event listeners removed - callouts will only update when refresh button is clicked
         
         await this.refreshCallouts();
     }
 
     async refreshCallouts() {
+        // Always read from JSON file instead of memory cache
         if (this.searchMode === 'current') {
             this.callouts = await this.plugin.extractCurrentFileCallouts();
         } else if (this.searchMode === 'search') {
-            // Use the plugin's extractAllCallouts method which handles file caching internally
-            console.log('Refreshing search mode callouts...');
-            this.callouts = await this.plugin.extractAllCallouts();
-            console.log(`Loaded ${this.callouts.length} callouts for search mode`);
+            // Load callouts from JSON file only
+            const cache = await this.plugin.loadCalloutCache();
+            if (cache && cache.callouts) {
+                this.callouts = cache.callouts;
+            } else {
+                this.callouts = [];
+            }
+        }
+        
+        // Check for new callout types and add them to settings
+        await this.detectAndAddNewCalloutTypes();
+        
+        // Update type selectors to include new types
+        const typeSelectors = this.containerEl.querySelector('.callout-type-selectors');
+        if (typeSelectors) {
+            this.setupTypeSelectors(typeSelectors as HTMLElement);
         }
         
         const container = this.containerEl.querySelector('.callout-container');
         if (container) {
             await this.renderCallouts(container as HTMLElement);
+        }
+    }
+
+    // Helper method to detect and add new callout types to settings
+    private async detectAndAddNewCalloutTypes() {
+        const currentTypes = new Set(this.callouts.map(c => c.type.toLowerCase().trim()));
+        let settingsChanged = false;
+        
+        for (const type of currentTypes) {
+            if (!this.plugin.settings.calloutColors[type]) {
+                // Add new callout type with fallback to note type colors
+                const noteColor = this.plugin.settings.calloutColors['note']?.color || '#086DDD';
+                const noteIcon = this.plugin.settings.calloutColors['note']?.icon || 'pencil';
+                
+                this.plugin.settings.calloutColors[type] = {
+                    color: noteColor,
+                    icon: noteIcon
+                };
+                settingsChanged = true;
+            }
+        }
+        
+        if (settingsChanged) {
+            await this.plugin.saveSettings();
+            // Update CSS to include the new types
+            this.plugin.injectCustomCalloutCSS();
         }
     }
 
@@ -373,14 +399,11 @@ class CalloutOrganizerView extends ItemView {
         refreshBtn.onclick = async () => {
             if (this.searchMode === 'search') {
                 // Force refresh by rescanning all files and updating cache
+                await this.plugin.refreshAllCallouts();
                 
-                this.callouts = await this.plugin.refreshAllCallouts();
-                
-                // Re-render the callouts
-                const container = this.containerEl.querySelector('.callout-container');
-                if (container) {
-                    await this.renderCallouts(container as HTMLElement);
-                }
+                // Then load from JSON file (not memory)
+                await this.refreshCallouts();
+                console.log('Callouts refreshed and saved to JSON file!');
                 
             } else {
                 // For current file mode, refresh and also rebuild cache
@@ -390,7 +413,7 @@ class CalloutOrganizerView extends ItemView {
                 
                 // Then refresh current file view
                 await this.refreshCallouts();
-                new Notice('Current file callouts refreshed! Cache updated.');
+                console.log('Current file callouts refreshed! Cache updated.');
             }
         };
         
@@ -459,13 +482,15 @@ class CalloutOrganizerView extends ItemView {
                 cls: `callout-type-selector callout-filter-${type}`
             });
             
-            // Add icon if available
-            const iconName = this.plugin.settings.calloutColors[type]?.icon;
+            // Add icon if available, fallback to "note" type icon
+            const iconName = this.plugin.settings.calloutColors[type]?.icon || 
+                           this.plugin.settings.calloutColors['note']?.icon || 'pencil';
             if (iconName && iconName !== 'none') {
                 const iconEl = button.createEl("span", { cls: "callout-type-icon" });
                 
                 // Special handling for note callout to ensure we get the correct lucide-pencil
-                if (type === 'note' && iconName === 'pencil') {
+                if ((type === 'note' && iconName === 'pencil') || (iconName === 'pencil')) {
+                    // Use the hardcoded SVG for pencil to avoid setIcon issues
                     iconEl.innerHTML = OBSIDIAN_NOTE_ICON_SVG;
                 } else {
                     setIcon(iconEl, iconName);
@@ -732,16 +757,19 @@ class CalloutOrganizerView extends ItemView {
                 cls: "callout-organizer-title"
             });
             
-            // Get callout color for styling
-            const calloutColor = this.plugin.settings.calloutColors[callout.type]?.color || 'var(--callout-title-color)';
+            // Get callout color for styling, fallback to "note" type color
+            const calloutColor = this.plugin.settings.calloutColors[callout.type]?.color || 
+                                this.plugin.settings.calloutColors['note']?.color || 'var(--callout-title-color)';
             
-            // Always add icon (for both custom titles and type titles)
-            const iconName = this.plugin.settings.calloutColors[callout.type]?.icon;
+            // Always add icon (for both custom titles and type titles), fallback to "note" type icon
+            const iconName = this.plugin.settings.calloutColors[callout.type]?.icon || 
+                           this.plugin.settings.calloutColors['note']?.icon || 'pencil';
             if (iconName && iconName !== 'none') {
                 const iconEl = titleEl.createEl("span", { cls: "callout-title-icon" });
                 
                 // Special handling for note callout to ensure we get the correct lucide-pencil
-                if (callout.type === 'note' && iconName === 'pencil') {
+                if ((callout.type === 'note' && iconName === 'pencil') || (iconName === 'pencil')) {
+                    // Use the hardcoded SVG for pencil to avoid setIcon issues
                     iconEl.innerHTML = OBSIDIAN_NOTE_ICON_SVG;
                 } else {
                     setIcon(iconEl, iconName);
@@ -1259,6 +1287,34 @@ export default class CalloutOrganizerPlugin extends Plugin {
             }
         });
 
+        this.addCommand({
+            id: 'reinitialize-callout-colors',
+            name: 'Reinitialize Callout Colors',
+            callback: async () => {
+                console.log('=== Reinitializing Callout Colors ===');
+                await this.initializeCalloutColors();
+                this.injectCustomCalloutCSS();
+                console.log('Callout colors reinitialized!');
+                
+                // Refresh the view if it's open
+                const view = this.getCalloutView();
+                if (view) {
+                    await view.refreshCallouts();
+                }
+            }
+        });
+
+        this.addCommand({
+            id: 'force-css-injection',
+            name: 'Force CSS Injection',
+            callback: () => {
+                console.log('=== Forcing CSS Injection ===');
+                console.log('Current callout settings:', this.settings.calloutColors);
+                this.injectCustomCalloutCSS();
+                console.log('CSS injection forced! Check console for details.');
+            }
+        });
+
         this.addSettingTab(new CalloutOrganizerSettingTab(this.app, this));
         
         // Auto-detect and populate callout colors on startup
@@ -1270,7 +1326,12 @@ export default class CalloutOrganizerPlugin extends Plugin {
 
     async initializeCalloutColors() {
         try {
-            const detectedTypes = await this.getAllCalloutTypesInVault();
+            // Get callout types from both vault scanning and cached data
+            const vaultTypes = await this.getAllCalloutTypesInVault();
+            const cachedTypes = await this.getAllCalloutTypesFromCache();
+            
+            // Combine both sets to ensure we have all callout types
+            const detectedTypes = new Set([...vaultTypes, ...cachedTypes]);
             let settingsChanged = false;
             
             for (const type of detectedTypes) {
@@ -1315,6 +1376,23 @@ export default class CalloutOrganizerPlugin extends Plugin {
             return `${parseInt(result[1], 16)},${parseInt(result[2], 16)},${parseInt(result[3], 16)}`;
         }
         return '0,0,0'; // fallback to black
+    }
+
+    // Get callout types from cached JSON data
+    async getAllCalloutTypesFromCache(): Promise<Set<string>> {
+        const calloutTypes = new Set<string>();
+        const cache = await this.loadCalloutCache();
+        
+        if (cache && cache.callouts) {
+            for (const callout of cache.callouts) {
+                calloutTypes.add(callout.type.toLowerCase().trim());
+            }
+            // Cached callout types loaded successfully
+        } else {
+            // No cached callouts found
+        }
+        
+        return calloutTypes;
     }
 
     async getAllCalloutTypesInVault(): Promise<Set<string>> {
@@ -2541,8 +2619,10 @@ class CalloutOrganizerSettingTab extends PluginSettingTab {
         const loadingEl = container.createEl('p', {text: 'Scanning vault for callout types...', cls: 'setting-item-description'});
         
         try {
-            // Get all callout types found in vault
-            const detectedTypes = await this.plugin.getAllCalloutTypesInVault();
+            // Get all callout types from both vault and cache
+            const vaultTypes = await this.plugin.getAllCalloutTypesInVault();
+            const cachedTypes = await this.plugin.getAllCalloutTypesFromCache();
+            const detectedTypes = new Set([...vaultTypes, ...cachedTypes]);
             const sortedTypes = Array.from(detectedTypes).sort();
             
             // Remove loading message

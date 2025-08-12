@@ -161,6 +161,42 @@
     "remark": {
       "color": "#ff6666",
       "icon": "none"
+    },
+    "je": {
+      "color": "#086DDD",
+      "icon": "pencil"
+    },
+    "jeee": {
+      "color": "#086DDD",
+      "icon": "pencil"
+    },
+    "debug": {
+      "color": "#086DDD",
+      "icon": "pencil"
+    },
+    "noteee": {
+      "color": "#086DDD",
+      "icon": "pencil"
+    },
+    "ttttt": {
+      "color": "#086DDD",
+      "icon": "pencil"
+    },
+    "eeeeeee": {
+      "color": "#086ddd",
+      "icon": "pencil"
+    },
+    "new": {
+      "color": "#086ddd",
+      "icon": "pencil"
+    },
+    "eeee": {
+      "color": "#086ddd",
+      "icon": "pencil"
+    },
+    "noted": {
+      "color": "#086ddd",
+      "icon": "pencil"
     }
   },
   "cacheFileName": "callouts.json",
