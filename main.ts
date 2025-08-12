@@ -1274,50 +1274,8 @@ export default class CalloutOrganizerPlugin extends Plugin {
             }
         });
 
-        // Add command to test cache loading (for debugging)
-        this.addCommand({
-            id: 'test-cache-loading',
-            name: 'Test Cache Loading',
-            callback: async () => {
-                console.log('=== Testing Cache Loading ===');
-                const cache = await this.loadCalloutCache();
-                if (cache) {
-                    new Notice(`Cache loaded successfully! Found ${cache.callouts.length} callouts.`);
-                    console.log('Cache data:', cache);
-                } else {
-                    new Notice('Failed to load cache or cache not found.');
-                    console.log('Cache loading failed');
-                }
-            }
-        });
 
-        this.addCommand({
-            id: 'reinitialize-callout-colors',
-            name: 'Reinitialize Callout Colors',
-            callback: async () => {
-                console.log('=== Reinitializing Callout Colors ===');
-                await this.initializeCalloutColors();
-                this.injectCustomCalloutCSS();
-                console.log('Callout colors reinitialized!');
-                
-                // Refresh the view if it's open
-                const view = this.getCalloutView();
-                if (view) {
-                    await view.refreshCallouts();
-                }
-            }
-        });
 
-        this.addCommand({
-            id: 'force-css-injection',
-            name: 'Force CSS Injection',
-            callback: () => {
-                console.log('=== Forcing CSS Injection ===');
-                console.log('Current callout settings:', this.settings.calloutColors);
-                this.injectCustomCalloutCSS();
-                console.log('CSS injection forced! Check console for details.');
-            }
-        });
 
         this.addSettingTab(new CalloutOrganizerSettingTab(this.app, this));
         
