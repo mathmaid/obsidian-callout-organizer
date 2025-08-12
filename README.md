@@ -184,6 +184,24 @@ MIT License - see LICENSE file for details
 
 ## Changelog
 
+### Version 1.2.3
+- 🚀 **Performance Improvements**:
+  - **Major Cache Optimization**: Fixed critical performance issue where cache was loaded multiple times during refresh (once per file). Now loads cache only once, dramatically improving performance for large vaults
+  - **Async File Operations**: Replaced blocking Node.js `fs.readFileSync/writeFileSync` with Obsidian's async vault adapter, eliminating UI freezing during file operations
+  - **DOM Caching**: Added intelligent DOM element caching to reduce repeated queries and improve rendering performance
+- 🔒 **Reliability Enhancements**:
+  - **Race Condition Protection**: Added cache operation locking to prevent concurrent operations from corrupting data
+  - **Input Validation**: Added JSON validation before parsing cache files, gracefully handling corrupted cache
+  - **Memory Leak Prevention**: Enhanced cleanup procedures in `onunload()` method to prevent memory accumulation
+- 🛠️ **Technical Improvements**:
+  - **Better Error Handling**: Improved error handling patterns throughout the codebase
+  - **Code Quality**: Enhanced TypeScript safety and removed potential null reference issues
+  - **Architecture**: Better separation of concerns with cleaner async operation management
+- 🐛 **Bug Fixes**:
+  - Fixed potential infinite loops in regex operations
+  - Resolved DOM element cleanup issues
+  - Enhanced cache consistency and validation
+
 ### Version 1.2.1
 - 🐛 **Bug Fixes**:
   - Fixed sorting in search mode to properly show recently modified callouts at the top

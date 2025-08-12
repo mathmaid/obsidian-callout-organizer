@@ -2,6 +2,47 @@
 
 All notable changes to the Callout Organizer plugin will be documented in this file.
 
+## [1.2.3] - 2025-08-12
+
+### 🚀 Critical Performance & Reliability Fixes
+
+#### Performance Improvements
+- **Major Cache Optimization**: Fixed critical performance bottleneck where cache was loaded once per file during refresh operations
+  - **Before**: For 100 files = 100 cache loads during refresh
+  - **After**: Single cache load regardless of vault size
+  - **Impact**: Dramatic performance improvement, especially for large vaults
+- **Async File Operations**: Replaced blocking Node.js `fs.readFileSync/writeFileSync` with Obsidian's async vault adapter
+  - **Eliminates UI freezing** during file operations
+  - **Non-blocking I/O** for better user experience
+- **DOM Performance**: Added intelligent DOM element caching to reduce repeated queries and improve rendering speed
+
+#### Reliability Enhancements
+- **Race Condition Protection**: Added cache operation locking mechanism to prevent concurrent operations from corrupting data
+- **Input Validation**: Added comprehensive JSON validation before parsing cache files
+  - **Graceful recovery** from corrupted cache files
+  - **Automatic cache regeneration** when validation fails
+- **Memory Leak Prevention**: Enhanced cleanup procedures in plugin unload to prevent memory accumulation over time
+
+#### Technical Improvements
+- **Enhanced Error Handling**: Improved error handling patterns throughout the entire codebase
+- **TypeScript Safety**: Enhanced type safety and eliminated potential null reference issues  
+- **Code Architecture**: Better separation of concerns with cleaner async operation management
+- **Cache Consistency**: Improved cache validation and consistency checks
+
+#### Bug Fixes
+- Fixed potential infinite loops in regex operations with safety checks
+- Resolved DOM element cleanup issues that could cause memory leaks
+- Enhanced cache loading robustness with proper error handling
+- Fixed TypeScript compilation issues and duplicate declarations
+
+### 🔧 Technical Details
+- **File Operations**: All cache operations now use Obsidian's vault adapter API instead of direct file system access
+- **Async Patterns**: Proper Promise handling with comprehensive error boundaries
+- **Memory Management**: Complete cleanup of DOM elements, timers, and event listeners on plugin unload
+- **Performance Monitoring**: Added cache operation timing and validation for debugging
+
+This release focuses entirely on **stability, performance, and reliability** improvements without changing user-facing features.
+
 ## [1.4.4] - 2025-08-06
 
 ### 🎨 Enhanced User Experience
