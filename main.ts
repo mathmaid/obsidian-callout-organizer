@@ -8,15 +8,24 @@ interface CalloutColors {
     icon: string; // Lucide icon name like "info" or ""
 }
 
+interface CalloutCache {
+    version: string;
+    timestamp: number;
+    vaultPath: string;
+    callouts: CalloutItem[];
+    fileModTimes: Record<string, number>; // file path -> modification time
+}
+
 interface CalloutOrganizerSettings {
     excludedFolders: string[];
     groupByType: boolean;
     searchInFilenames: boolean;
-    searchInHeaders: boolean;
     searchInCalloutTitles: boolean;
     searchInCalloutIds: boolean;
     searchInCalloutContent: boolean;
     maxSearchResults: number;
+    // Cache settings
+    enableFileCache: boolean;
     // Display options
     showFilenames: boolean;
     showH1Headers: boolean;
@@ -42,11 +51,12 @@ const DEFAULT_SETTINGS: CalloutOrganizerSettings = {
     excludedFolders: [],
     groupByType: false, // Show in file order by default
     searchInFilenames: true,
-    searchInHeaders: true,
     searchInCalloutTitles: true,
     searchInCalloutIds: true,
     searchInCalloutContent: true,
     maxSearchResults: 50,
+    // Cache settings
+    enableFileCache: true,
     // Display options - show all by default
     showFilenames: true,
     showH1Headers: true,
@@ -95,16 +105,12 @@ class CalloutOrganizerView extends ItemView {
     activeFilters: Set<string> = new Set();
     searchMode: 'current' | 'search';
     searchQuery: string = '';
-    allCalloutsCache: CalloutItem[] = [];
-    cacheTimestamp: number = 0;
     
     // Debouncing and performance optimizations
     private refreshDebounceTimer: NodeJS.Timeout | null = null;
     private searchDebounceTimer: NodeJS.Timeout | null = null;
-    private cacheRefreshInProgress = false;
     private lastRenderTime: number = 0;
     private readonly DEBOUNCE_DELAY = 300;
-    private readonly MAX_CACHE_SIZE = 1000; // Limit cache size
     private readonly RENDER_BATCH_SIZE = 20; // Batch DOM operations
     private readonly MIN_RENDER_INTERVAL = 100;
     
@@ -152,10 +158,11 @@ class CalloutOrganizerView extends ItemView {
             }
         }));
         
-        // Listen for file changes to invalidate cache with debouncing
+        // Listen for file changes to refresh callouts
         this.registerEvent(this.app.vault.on('modify', () => {
             if (this.searchMode === 'search') {
-                this.debouncedCacheInvalidation();
+                // File cache will handle invalidation internally
+                console.log('File modified, cache will be validated on next access');
             }
         }));
         
@@ -166,29 +173,10 @@ class CalloutOrganizerView extends ItemView {
         if (this.searchMode === 'current') {
             this.callouts = await this.plugin.extractCurrentFileCallouts();
         } else if (this.searchMode === 'search') {
-            // Check if cache is still valid (5 minutes)
-            const now = Date.now();
-            const cacheExpired = now - this.cacheTimestamp > 5 * 60 * 1000;
-            
-            if ((cacheExpired || this.allCalloutsCache.length === 0) && !this.cacheRefreshInProgress) {
-                this.cacheRefreshInProgress = true;
-                
-                try {
-                    let allCallouts = await this.plugin.extractAllCallouts();
-                    
-                    // Cache management - limit size to prevent memory issues
-                    if (allCallouts.length > this.MAX_CACHE_SIZE) {
-                        console.log(`Callout cache size (${allCallouts.length}) exceeds limit (${this.MAX_CACHE_SIZE}), truncating`);
-                        allCallouts = allCallouts.slice(0, this.MAX_CACHE_SIZE);
-                    }
-                    
-                    this.allCalloutsCache = allCallouts;
-                    this.cacheTimestamp = now;
-                } finally {
-                    this.cacheRefreshInProgress = false;
-                }
-            }
-            this.callouts = this.allCalloutsCache;
+            // Use the plugin's extractAllCallouts method which handles file caching internally
+            console.log('Refreshing search mode callouts...');
+            this.callouts = await this.plugin.extractAllCallouts();
+            console.log(`Loaded ${this.callouts.length} callouts for search mode`);
         }
         
         const container = this.containerEl.querySelector('.callout-container');
@@ -285,7 +273,6 @@ class CalloutOrganizerView extends ItemView {
         
         const enabledFields: string[] = [];
         if (this.plugin.settings.searchInFilenames) enabledFields.push('files');
-        if (this.plugin.settings.searchInHeaders) enabledFields.push('headers');
         if (this.plugin.settings.searchInCalloutTitles) enabledFields.push('callout titles');
         if (this.plugin.settings.searchInCalloutIds) enabledFields.push('callout IDs');
         if (this.plugin.settings.searchInCalloutContent) enabledFields.push('callout content');
@@ -358,13 +345,30 @@ class CalloutOrganizerView extends ItemView {
         setIcon(refreshBtn, "refresh-cw");
         
         refreshBtn.onclick = async () => {
-            // Force cache refresh for "Search" mode
             if (this.searchMode === 'search') {
-                this.cacheTimestamp = 0;
+                // Force refresh by rescanning all files and updating cache
+                new Notice('Rescanning all files and updating cache...');
+                
+                this.callouts = await this.plugin.refreshAllCallouts();
+                
+                // Re-render the callouts
+                const container = this.containerEl.querySelector('.callout-container');
+                if (container) {
+                    await this.renderCallouts(container as HTMLElement);
+                }
+                
+                new Notice(`Search results refreshed! Found ${this.callouts.length} callouts. Cache updated.`);
+            } else {
+                // For current file mode, refresh and also rebuild cache
+                new Notice('Refreshing current file and updating cache...');
+                
+                // First rebuild the cache by scanning all files
+                await this.plugin.refreshAllCallouts();
+                
+                // Then refresh current file view
+                await this.refreshCallouts();
+                new Notice('Current file callouts refreshed! Cache updated.');
             }
-            await this.refreshCallouts();
-            const mode = this.searchMode === 'search' ? 'Search results' : 'Current file callouts';
-            new Notice(`${mode} refreshed!`);
         };
         
         // Second line: type selectors
@@ -511,9 +515,6 @@ class CalloutOrganizerView extends ItemView {
                     // In search mode, use settings configuration
                     if (settings.searchInFilenames) {
                         searchText += callout.file.toLowerCase() + ' ';
-                    }
-                    if (settings.searchInHeaders && callout.headers) {
-                        searchText += callout.headers.join(' ').toLowerCase() + ' ';
                     }
                     if (settings.searchInCalloutTitles) {
                         searchText += callout.title.toLowerCase() + ' ';
@@ -746,7 +747,8 @@ class CalloutOrganizerView extends ItemView {
         
         // Add filename if enabled in settings
         if (this.plugin.settings.showFilenames) {
-            const filename = callout.file.split('/').pop()?.replace(/\.md$/, '') || callout.file;
+            const fileParts = callout.file?.split('/');
+            const filename = fileParts?.pop()?.replace(/\.md$/, '') || callout.file || 'Unknown';
             const fileLink = breadcrumb.createEl("a", { 
                 text: filename,
                 href: "#",
@@ -1017,9 +1019,14 @@ class CalloutOrganizerView extends ItemView {
         }
     }
 
-    highlightLine(editor: any, lineNumber: number) {
+    highlightLine(editor: unknown, lineNumber: number) {
         try {
-            const lineInfo = editor.lineInfo(lineNumber);
+            // Type guard for editor object
+            if (!editor || typeof editor !== 'object' || !('lineInfo' in editor)) {
+                return;
+            }
+            
+            const lineInfo = (editor as any).lineInfo(lineNumber);
             if (!lineInfo) return;
             
             // Create a highlight decoration
@@ -1054,8 +1061,9 @@ class CalloutOrganizerView extends ItemView {
             }
             
             // Position the highlight with better error handling
-            if (editor.display && editor.display.lineDiv && editor.display.lineDiv.children) {
-                const lineEl = editor.display.lineDiv.children[lineNumber];
+            const editorWithDisplay = editor as any;
+            if (editorWithDisplay.display && editorWithDisplay.display.lineDiv && editorWithDisplay.display.lineDiv.children) {
+                const lineEl = editorWithDisplay.display.lineDiv.children[lineNumber];
                 if (lineEl && markEl) {
                     lineEl.style.position = 'relative';
                     lineEl.appendChild(markEl);
@@ -1074,15 +1082,6 @@ class CalloutOrganizerView extends ItemView {
     }
 
     // Performance optimization methods
-    private debouncedCacheInvalidation() {
-        if (this.refreshDebounceTimer) {
-            clearTimeout(this.refreshDebounceTimer);
-        }
-        this.refreshDebounceTimer = setTimeout(() => {
-            this.cacheTimestamp = 0;
-        }, this.DEBOUNCE_DELAY);
-    }
-
     private debouncedSearch() {
         if (this.searchDebounceTimer) {
             clearTimeout(this.searchDebounceTimer);
@@ -1116,11 +1115,13 @@ class CalloutOrganizerView extends ItemView {
 
     private processMathForElement(element: HTMLElement) {
         // Process math for individual callout elements
-        if ((window as any).MathJax?.typesetPromise) {
-            // First, check if there are any math elements that need processing
-            const mathElements = element.querySelectorAll('.math, mjx-container, [data-math], .cm-math');
-            if (mathElements.length > 0) {
-                (window as any).MathJax.typesetPromise([element]).then(() => {
+        try {
+            const mathJax = (window as any).MathJax;
+            if (mathJax?.typesetPromise) {
+                // First, check if there are any math elements that need processing
+                const mathElements = element.querySelectorAll('.math, mjx-container, [data-math], .cm-math');
+                if (mathElements.length > 0) {
+                    mathJax.typesetPromise([element]).then(() => {
                     // Ensure proper styling of math elements
                     element.querySelectorAll('mjx-container').forEach((mjx: Element) => {
                         const mjxElement = mjx as HTMLElement;
@@ -1133,10 +1134,14 @@ class CalloutOrganizerView extends ItemView {
                             mjxElement.style.margin = '0';
                         }
                     });
-                }).catch(() => {
-                    // Silent catch - let Obsidian handle errors
-                });
+                    }).catch(() => {
+                        // Silent catch - let Obsidian handle errors
+                    });
+                }
             }
+        } catch (error) {
+            // Silently handle any errors in math processing
+            console.warn('Math processing error:', error);
         }
     }
 
@@ -1160,11 +1165,8 @@ class CalloutOrganizerView extends ItemView {
         }
         
         // Comprehensive cleanup to free memory
-        this.allCalloutsCache = [];
         this.callouts = [];
         this.activeFilters.clear();
-        this.cacheTimestamp = 0;
-        this.cacheRefreshInProgress = false;
         
         // Clean up component
         this.component?.unload();
@@ -1177,6 +1179,12 @@ export default class CalloutOrganizerPlugin extends Plugin {
     static readonly CALLOUT_REGEX = /^>\s*\[!([^\]]+)\]\s*(.*?)$/;
     static readonly BLOCK_ID_REGEX = /\^([\w-]+)\s*$/;
     static readonly CONTENT_EXTRACT_REGEX = /^>\s?/;
+    
+    // Cache constants
+    static readonly CACHE_VERSION = "1.0";
+    static readonly PLUGIN_FOLDER = "callout-organizer";
+    static readonly CACHE_FILENAME = "callouts.json";
+    
     settings: CalloutOrganizerSettings;
 
     async onload() {
@@ -1196,6 +1204,23 @@ export default class CalloutOrganizerPlugin extends Plugin {
             name: 'Open Callout Organizer',
             callback: () => {
                 this.activateCalloutOrganizer();
+            }
+        });
+
+        // Add command to test cache loading (for debugging)
+        this.addCommand({
+            id: 'test-cache-loading',
+            name: 'Test Cache Loading',
+            callback: async () => {
+                console.log('=== Testing Cache Loading ===');
+                const cache = await this.loadCalloutCache();
+                if (cache) {
+                    new Notice(`Cache loaded successfully! Found ${cache.callouts.length} callouts.`);
+                    console.log('Cache data:', cache);
+                } else {
+                    new Notice('Failed to load cache or cache not found.');
+                    console.log('Cache loading failed');
+                }
             }
         });
 
@@ -1393,8 +1418,11 @@ export default class CalloutOrganizerPlugin extends Plugin {
         
         // If we got a CSS variable value like "68,138,255", convert to hex
         if (colorValue && colorValue.includes(',')) {
-            const [r, g, b] = colorValue.split(',').map(x => parseInt(x.trim()));
-            return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+            const colorParts = colorValue.split(',').map(x => parseInt(x.trim()));
+            if (colorParts.length >= 3 && colorParts.every(x => !isNaN(x) && x >= 0 && x <= 255)) {
+                const [r, g, b] = colorParts;
+                return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+            }
         }
         
         // Fallback to stored color if we can't get computed color
@@ -1555,6 +1583,41 @@ export default class CalloutOrganizerPlugin extends Plugin {
     }
 
     async extractAllCallouts(): Promise<CalloutItem[]> {
+        console.log('=== extractAllCallouts called ===');
+        
+        // Try to load from cache first
+        if (this.settings.enableFileCache) {
+            console.log('File cache is enabled, checking for existing cache...');
+            const cache = await this.loadCalloutCache();
+            if (cache && await this.isCacheValid(cache)) {
+                console.log(`✅ Using cached callouts: ${cache.callouts.length} items`);
+                return cache.callouts;
+            } else {
+                console.log('❌ Cache invalid or not found, will scan files');
+            }
+        } else {
+            console.log('File cache is disabled');
+        }
+
+        // Cache miss or invalid, scan all files
+        console.log('📁 Scanning all files for callouts...');
+        const callouts = await this.scanAllCallouts();
+        
+        // Save to cache if enabled
+        if (this.settings.enableFileCache) {
+            console.log('💾 Saving to cache...');
+            const saveResult = await this.saveCalloutCache(callouts);
+            if (saveResult) {
+                console.log(`✅ Saved ${callouts.length} callouts to cache`);
+            } else {
+                console.log('❌ Failed to save to cache');
+            }
+        }
+
+        return callouts;
+    }
+
+    async scanAllCallouts(): Promise<CalloutItem[]> {
         const callouts: CalloutItem[] = [];
         const files = this.app.vault.getMarkdownFiles();
         const currentFile = this.app.workspace.getActiveFile();
@@ -1577,6 +1640,19 @@ export default class CalloutOrganizerPlugin extends Plugin {
             processedFiles.add(file.path);
         }
         
+        return callouts;
+    }
+
+    async refreshAllCallouts(): Promise<CalloutItem[]> {
+        console.log('Refreshing callouts - rescanning all files...');
+        const callouts = await this.scanAllCallouts();
+        
+        // Update cache
+        if (this.settings.enableFileCache) {
+            await this.saveCalloutCache(callouts);
+            console.log(`Updated cache with ${callouts.length} callouts`);
+        }
+
         return callouts;
     }
 
@@ -1711,6 +1787,147 @@ export default class CalloutOrganizerPlugin extends Plugin {
         return callouts;
     }
 
+    // Cache management methods
+    getCacheFilePath(): string {
+        return `.obsidian/plugins/${CalloutOrganizerPlugin.PLUGIN_FOLDER}/${CalloutOrganizerPlugin.CACHE_FILENAME}`;
+    }
+
+    async loadCalloutCache(): Promise<CalloutCache | null> {
+        if (!this.settings.enableFileCache) {
+            return null;
+        }
+
+        try {
+            // Load directly from plugin folder using filesystem
+            const fs = require('fs');
+            const path = require('path');
+            
+            const adapter = this.app.vault.adapter as any;
+            if (!adapter?.basePath) {
+                console.warn('Unable to access vault adapter base path');
+                return null;
+            }
+            const dataDir = adapter.basePath;
+            const cachePath = path.join(dataDir, '.obsidian', 'plugins', CalloutOrganizerPlugin.PLUGIN_FOLDER, CalloutOrganizerPlugin.CACHE_FILENAME);
+            
+            console.log(`Attempting to load cache from: ${cachePath}`);
+            
+            if (!fs.existsSync(cachePath)) {
+                console.log('Cache file does not exist');
+                return null;
+            }
+
+            const cacheContent = fs.readFileSync(cachePath, 'utf8');
+            const cache: CalloutCache = JSON.parse(cacheContent);
+
+            // Validate cache version and vault path
+            if (cache.version !== CalloutOrganizerPlugin.CACHE_VERSION) {
+                console.log('Cache version mismatch, invalidating cache');
+                return null;
+            }
+
+            const currentVaultPath = this.app.vault.getName() || '';
+            if (cache.vaultPath !== currentVaultPath) {
+                console.log(`Vault path changed (${cache.vaultPath} != ${currentVaultPath}), invalidating cache`);
+                return null;
+            }
+
+            console.log(`✅ Successfully loaded ${cache.callouts.length} callouts from plugin folder cache`);
+            return cache;
+        } catch (error) {
+            console.warn('Failed to load callout cache:', error);
+            return null;
+        }
+    }
+
+    async saveCalloutCache(callouts: CalloutItem[]): Promise<boolean> {
+        if (!this.settings.enableFileCache) {
+            console.log('File cache is disabled, skipping save');
+            return false;
+        }
+
+        console.log(`Attempting to save ${callouts.length} callouts to cache...`);
+
+        try {
+            // Collect file modification times
+            const fileModTimes: Record<string, number> = {};
+            const files = this.app.vault.getMarkdownFiles();
+            
+            for (const file of files) {
+                if (!this.shouldSkipFile(file.path, true)) {
+                    fileModTimes[file.path] = file.stat.mtime;
+                }
+            }
+
+            const cache: CalloutCache = {
+                version: CalloutOrganizerPlugin.CACHE_VERSION,
+                timestamp: Date.now(),
+                vaultPath: this.app.vault.getName() || '',
+                callouts,
+                fileModTimes
+            };
+
+            // Save directly to plugin folder using filesystem
+            const fs = require('fs');
+            const path = require('path');
+            
+            const adapter = this.app.vault.adapter as any;
+            if (!adapter?.basePath) {
+                console.warn('Unable to access vault adapter base path');
+                return false;
+            }
+            const dataDir = adapter.basePath;
+            const cacheFilePath = path.join(dataDir, '.obsidian', 'plugins', CalloutOrganizerPlugin.PLUGIN_FOLDER, CalloutOrganizerPlugin.CACHE_FILENAME);
+            const cacheContent = JSON.stringify(cache, null, 2);
+
+            console.log(`Saving cache to: ${cacheFilePath}`);
+
+            fs.writeFileSync(cacheFilePath, cacheContent, 'utf8');
+            console.log('✅ Cache file saved successfully to plugin folder');
+            return true;
+        } catch (error) {
+            console.error('Failed to save callout cache:', error);
+            return false;
+        }
+    }
+
+    async isCacheValid(cache: CalloutCache): Promise<boolean> {
+        if (!cache || !this.settings.enableFileCache) {
+            return false;
+        }
+
+        try {
+            // Check if any files have been modified since cache was created
+            for (const [filePath, cachedModTime] of Object.entries(cache.fileModTimes)) {
+                const file = this.app.vault.getAbstractFileByPath(filePath);
+                if (file instanceof TFile) {
+                    if (file.stat.mtime > cachedModTime) {
+                        console.log(`File ${filePath} has been modified, cache invalid`);
+                        return false;
+                    }
+                } else {
+                    // File no longer exists
+                    console.log(`File ${filePath} no longer exists, cache invalid`);
+                    return false;
+                }
+            }
+
+            // Check for new files
+            const currentFiles = this.app.vault.getMarkdownFiles();
+            for (const file of currentFiles) {
+                if (!this.shouldSkipFile(file.path, true) && !cache.fileModTimes.hasOwnProperty(file.path)) {
+                    console.log(`New file ${file.path} found, cache invalid`);
+                    return false;
+                }
+            }
+
+            return true;
+        } catch (error) {
+            console.warn('Error validating cache:', error);
+            return false;
+        }
+    }
+
     onunload() {
         this.app.workspace.detachLeavesOfType(VIEW_TYPE_CALLOUT_ORGANIZER);
         
@@ -1747,7 +1964,55 @@ class CalloutOrganizerSettingTab extends PluginSettingTab {
         // Use h1 to match Obsidian's standard settings hierarchy
         containerEl.createEl('h1', {text: 'Callout Organizer Settings'});
 
-        // Removed Callout Types to Show setting
+        // Performance Options
+        containerEl.createEl('h3', {text: 'Performance Options'});
+
+        const performanceContainer = containerEl.createEl('div', {cls: 'callout-settings-indent'});
+
+        new Setting(performanceContainer)
+            .setName('Enable File Cache')
+            .setDesc('Cache callouts in a file to improve startup performance. Disabling this will scan all files each time.')
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.enableFileCache)
+                .onChange(async (value) => {
+                    this.plugin.settings.enableFileCache = value;
+                    await this.plugin.saveSettings();
+                    
+                    if (value) {
+                        new Notice('File cache enabled. Callouts will be cached for faster startup.');
+                    } else {
+                        new Notice('File cache disabled. Plugin will scan files on each startup.');
+                        
+                        // Clean up existing cache file if it exists
+                        try {
+                            const cacheFilePath = this.plugin.getCacheFilePath();
+                            const cacheFile = this.app.vault.getAbstractFileByPath(cacheFilePath);
+                            
+                            if (cacheFile && cacheFile instanceof TFile) {
+                                await this.app.vault.delete(cacheFile);
+                                console.log('Cache file deleted via Obsidian API');
+                            }
+                            
+                            // Also try to clean up from plugin folder
+                            const fs = require('fs');
+                            const path = require('path');
+                            const adapter = this.app.vault.adapter as any;
+            if (!adapter?.basePath) {
+                console.warn('Unable to access vault adapter base path');
+                return null;
+            }
+            const dataDir = adapter.basePath;
+                            const pluginCachePath = path.join(dataDir, '.obsidian', 'plugins', 'callout-organizer', 'callouts.json');
+                            
+                            if (fs.existsSync(pluginCachePath)) {
+                                fs.unlinkSync(pluginCachePath);
+                                console.log('Plugin folder cache file also deleted');
+                            }
+                        } catch (error) {
+                            console.warn('Failed to delete cache file:', error);
+                        }
+                    }
+                }));
 
 
         containerEl.createEl('h3', {text: 'Display Options'});
@@ -1978,21 +2243,6 @@ class CalloutOrganizerSettingTab extends PluginSettingTab {
                 .setValue(this.plugin.settings.searchInFilenames)
                 .onChange(async (value) => {
                     this.plugin.settings.searchInFilenames = value;
-                    await this.plugin.saveSettings();
-                    // Refresh view to update placeholder
-                    const view = this.plugin.getCalloutView();
-                    if (view) {
-                        await view.refreshCallouts();
-                    }
-                }));
-
-        new Setting(searchContainer)
-            .setName('Search in Headers')
-            .setDesc('Include section headings (# Headers, ## Headers, etc.) that contain the callout in search results')
-            .addToggle(toggle => toggle
-                .setValue(this.plugin.settings.searchInHeaders)
-                .onChange(async (value) => {
-                    this.plugin.settings.searchInHeaders = value;
                     await this.plugin.saveSettings();
                     // Refresh view to update placeholder
                     const view = this.plugin.getCalloutView();

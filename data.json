@@ -2,11 +2,11 @@
   "excludedFolders": [],
   "groupByType": false,
   "searchInFilenames": true,
-  "searchInHeaders": true,
   "searchInCalloutTitles": true,
   "searchInCalloutIds": true,
   "searchInCalloutContent": true,
   "maxSearchResults": 50,
+  "enableFileCache": true,
   "showFilenames": true,
   "showH1Headers": true,
   "showH2Headers": true,
@@ -163,6 +163,8 @@
       "icon": "none"
     }
   },
+  "cacheFileName": "callouts.json",
+  "searchInHeaders": true,
   "showCurrentFileInSearch": true,
   "showOutlinksInCurrentFile": true
 }

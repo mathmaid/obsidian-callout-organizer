@@ -12,9 +12,10 @@ A powerful plugin for organizing, searching, navigating, and citing callouts acr
 
 ### 🎯 Smart Callout Organization
 - **Current File View**: See all callouts in the currently active file
-- **Vault-Wide Search**: Search callouts across your entire vault
+- **Vault-Wide Search**: Search callouts across your entire vault with file caching
 - **Type Filtering**: Filter callouts by type with visual buttons
 - **Search Integration**: Find callouts by title, content, filename, headers, or block IDs
+- **File Caching**: Intelligently caches callout data for faster search performance
 
 ![](src/custom.png)
 
@@ -121,6 +122,20 @@ You may have some callouts in code blocks somewhere. These callouts can also be 
 
 Some old callouts created before using this plugin can not be searched in this plugin. You can solve this problem by changing the filename to ensure the plugin tracking your callouts.
 
+### Cache Management
+
+The plugin uses intelligent file caching to improve search performance:
+
+- **Cache Location**: Stored as `callouts.json` in the plugin folder (`.obsidian/plugins/callout-organizer/`)
+- **Auto-Invalidation**: Cache is automatically refreshed when files are modified
+- **Manual Refresh**: Use the refresh button in Search mode to force cache rebuild
+- **Cache Settings**: Can be disabled in plugin settings if needed
+
+**Cache Troubleshooting**:
+- If callouts are missing, try clicking the refresh button in Search mode
+- Check that "Enable file cache" is turned on in settings
+- Cache automatically rebuilds when files change, but manual refresh may be needed after major vault changes
+
 ## Settings
 
 ### Display Options
@@ -132,6 +147,7 @@ Some old callouts created before using this plugin can not be searched in this p
 - **Excluded Folders**: Skip specific folders in vault-wide search
 - **Search Fields**: Enable/disable searching in different content areas
 - **Result Limits**: Control maximum number of search results
+- **File Cache**: Enable/disable file caching for faster search performance
 
 ### Callout Customization
 - **Colors**: Customize colors for any callout type
