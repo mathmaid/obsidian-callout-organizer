@@ -373,7 +373,6 @@ class CalloutOrganizerView extends ItemView {
         refreshBtn.onclick = async () => {
             if (this.searchMode === 'search') {
                 // Force refresh by rescanning all files and updating cache
-                new Notice('Rescanning all files and updating cache...');
                 
                 this.callouts = await this.plugin.refreshAllCallouts();
                 
@@ -383,10 +382,8 @@ class CalloutOrganizerView extends ItemView {
                     await this.renderCallouts(container as HTMLElement);
                 }
                 
-                new Notice(`Search results refreshed! Found ${this.callouts.length} callouts. Cache updated.`);
             } else {
                 // For current file mode, refresh and also rebuild cache
-                new Notice('Refreshing current file and updating cache...');
                 
                 // First rebuild the cache by scanning all files
                 await this.plugin.refreshAllCallouts();
@@ -579,6 +576,14 @@ class CalloutOrganizerView extends ItemView {
 
     async renderCalloutsList(container: HTMLElement) {
         container.empty();
+        
+        // Add ghost prompt showing callout count
+        const totalCallouts = this.callouts.length;
+        const location = this.searchMode === 'search' ? 'the vault' : 'current file';
+        const ghostPrompt = container.createEl("div", { 
+            text: `There are ${totalCallouts} callouts in ${location}`,
+            cls: "callout-count-ghost-prompt"
+        });
         
         const filteredCallouts = this.getFilteredCallouts();
         

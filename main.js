@@ -270,18 +270,14 @@ var CalloutOrganizerView = class extends import_obsidian.ItemView {
     (0, import_obsidian.setIcon)(refreshBtn, "refresh-cw");
     refreshBtn.onclick = async () => {
       if (this.searchMode === "search") {
-        new import_obsidian.Notice("Rescanning all files and updating cache...");
         this.callouts = await this.plugin.refreshAllCallouts();
         const container2 = this.containerEl.querySelector(".callout-container");
         if (container2) {
           await this.renderCallouts(container2);
         }
-        new import_obsidian.Notice(`Search results refreshed! Found ${this.callouts.length} callouts. Cache updated.`);
       } else {
-        new import_obsidian.Notice("Refreshing current file and updating cache...");
         await this.plugin.refreshAllCallouts();
         await this.refreshCallouts();
-        new import_obsidian.Notice("Current file callouts refreshed! Cache updated.");
       }
     };
     const secondLine = container.createEl("div", { cls: "callout-top-bar-line-2" });
@@ -414,6 +410,12 @@ var CalloutOrganizerView = class extends import_obsidian.ItemView {
   }
   async renderCalloutsList(container) {
     container.empty();
+    const totalCallouts = this.callouts.length;
+    const location = this.searchMode === "search" ? "the vault" : "current file";
+    const ghostPrompt = container.createEl("div", { 
+      text: `There are ${totalCallouts} callouts in ${location}`,
+      cls: "callout-count-ghost-prompt"
+    });
     const filteredCallouts = this.getFilteredCallouts();
     if (filteredCallouts.length === 0) {
       let message = "No callouts found.";
