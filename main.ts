@@ -732,21 +732,14 @@ class CalloutOrganizerView extends ItemView {
                     needsNewId = true;
                 }
                 
-                // Create the link using only filename (without folder path)
-                const useEmbed = this.plugin.settings.useEmbedLinks;
+                // Create standard Obsidian embed format that canvas handles properly
                 const filenameWithExt = callout.file.split('/').pop() || callout.file;
                 const filename = filenameWithExt.replace(/\.md$/, '');
                 
-                let linkText: string;
-                if (this.plugin.settings.hideFileNamesInLinks) {
-                    // Generate alias to hide filename
-                    const alias = this.generateCalloutAlias(callout, calloutID);
-                    linkText = useEmbed ? `![[${filename}#^${calloutID}|${alias}]]` : `[[${filename}#^${calloutID}|${alias}]]`;
-                } else {
-                    linkText = useEmbed ? `![[${filename}#^${calloutID}]]` : `[[${filename}#^${calloutID}]]`;
-                }
+                // Use standard embed format - this matches how existing callouts appear in canvas
+                const embedText = `![[${filename}#^${calloutID}]]`;
                 
-                e.dataTransfer.setData('text/plain', linkText);
+                e.dataTransfer.setData('text/plain', embedText);
                 
                 // Provide additional data formats that might influence canvas node creation
                 // Method 1: Try to mimic file drag behavior
@@ -759,11 +752,12 @@ class CalloutOrganizerView extends ItemView {
                     }));
                 }
                 
-                // Method 2: Set suggested canvas node properties
+                // Method 2: Set suggested canvas node properties using file type (like Obsidian does)
                 const suggestedNodeProps = {
-                    id: `${filename}.md#^${calloutID}`,
-                    text: linkText,
-                    type: 'text'
+                    id: `${filename}#^${calloutID}`,
+                    type: 'file',
+                    file: `${filename}.md`,
+                    subpath: `#^${calloutID}`
                 };
                 e.dataTransfer.setData('text/canvas-node-props', JSON.stringify(suggestedNodeProps));
                 
@@ -1735,9 +1729,10 @@ export default class CalloutOrganizerPlugin extends Plugin {
             const canvasData = {
                 nodes: [
                     {
-                        id: `${selectedCallout.file}#^${selectedCallout.calloutID}`,
-                        type: "text",
-                        text: `![[${selectedCallout.file}#^${selectedCallout.calloutID}]]`,
+                        id: `${selectedCallout.file.split('/').pop()?.replace(/\.md$/, '') || selectedCallout.file.replace(/\.md$/, '')}#^${selectedCallout.calloutID}`,
+                        type: "file",
+                        file: selectedCallout.file,
+                        subpath: `#^${selectedCallout.calloutID}`,
                         x: 0,
                         y: 0,
                         width: 400,
@@ -1839,7 +1834,7 @@ export default class CalloutOrganizerPlugin extends Plugin {
             
             // 添加所有节点到canvas
             layoutData.forEach(({callout, x, y, level}) => {
-                const calloutId = `${callout.file}#^${callout.calloutID}`;
+                const calloutId = `${callout.file.split('/').pop()?.replace(/\.md$/, '') || callout.file.replace(/\.md$/, '')}#^${callout.calloutID}`;
                 
                 // 根据层级调整节点大小
                 const nodeWidth = Math.max(300, 400 - level * 25);
@@ -1847,8 +1842,9 @@ export default class CalloutOrganizerPlugin extends Plugin {
                 
                 canvasData.nodes.push({
                     id: calloutId,
-                    type: "text",
-                    text: `![[${callout.file}#^${callout.calloutID}]]`,
+                    type: "file",
+                    file: callout.file,
+                    subpath: `#^${callout.calloutID}`,
                     x: Math.round(x),
                     y: Math.round(y),
                     width: nodeWidth,
@@ -1867,8 +1863,8 @@ export default class CalloutOrganizerPlugin extends Plugin {
                                      (toKey === mainCalloutKey ? selectedCallout : null);
                     
                     if (fromCallout && toCallout) {
-                        const fromId = `${fromCallout.file}#^${fromCallout.calloutID}`;
-                        const toId = `${toCallout.file}#^${toCallout.calloutID}`;
+                        const fromId = `${fromCallout.file.split('/').pop()?.replace(/\.md$/, '') || fromCallout.file.replace(/\.md$/, '')}#^${fromCallout.calloutID}`;
+                        const toId = `${toCallout.file.split('/').pop()?.replace(/\.md$/, '') || toCallout.file.replace(/\.md$/, '')}#^${toCallout.calloutID}`;
                         
                         // 避免重复边（检查反向连接）
                         const reverseEdgeExists = Array.from(allConnections.get(toKey) || []).includes(fromKey);
@@ -2212,10 +2208,53 @@ export default class CalloutOrganizerPlugin extends Plugin {
                 // Use setTimeout to allow canvas to create the node first
                 setTimeout(() => {
                     this.fixCanvasNodeId(canvasEl, props);
+                    // Additional deselection after a longer delay to ensure it takes effect
+                    setTimeout(() => {
+                        this.deselectAllCanvasNodes();
+                    }, 200);
                 }, 100);
             } catch (error) {
                 console.error('Error parsing canvas node props:', error);
             }
+        }
+    }
+
+    /**
+     * Helper function to deselect all canvas nodes
+     */
+    private deselectAllCanvasNodes() {
+        try {
+            const activeLeaf = this.app.workspace.activeLeaf;
+            if (activeLeaf && activeLeaf.view && activeLeaf.view.getViewType() === 'canvas') {
+                const canvasView = activeLeaf.view as any;
+                const canvas = canvasView.canvas;
+                
+                if (canvas) {
+                    // Try multiple methods to deselect nodes
+                    if (canvas.selection && canvas.selection.clear) {
+                        canvas.selection.clear();
+                    }
+                    
+                    if (canvas.deselectAll) {
+                        canvas.deselectAll();
+                    }
+                    
+                    // Force canvas to blur any focused elements
+                    if (canvas.wrapperEl) {
+                        const focusedElement = canvas.wrapperEl.querySelector(':focus');
+                        if (focusedElement && focusedElement.blur) {
+                            focusedElement.blur();
+                        }
+                    }
+                    
+                    // Set focus back to the canvas container
+                    if (canvas.containerEl && canvas.containerEl.focus) {
+                        canvas.containerEl.focus();
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('Error deselecting canvas nodes:', error);
         }
     }
 
@@ -2264,6 +2303,21 @@ export default class CalloutOrganizerPlugin extends Plugin {
                     
                     // Add the node with the new ID
                     canvas.nodes.set(nodeProps.id, targetNode);
+                    
+                    // Deselect the node to prevent it from staying in edit mode
+                    if (canvas.selection && canvas.selection.clear) {
+                        canvas.selection.clear();
+                    }
+                    
+                    // Alternative: deselect all nodes if the above doesn't work
+                    if (canvas.deselectAll) {
+                        canvas.deselectAll();
+                    }
+                    
+                    // If the node has a blur method, call it to exit edit mode
+                    if (targetNode.blur) {
+                        targetNode.blur();
+                    }
                     
                     // Trigger canvas update and save
                     if (canvas.requestSave) {
