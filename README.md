@@ -184,6 +184,31 @@ MIT License - see LICENSE file for details
 
 ## Changelog
 
+### Version 1.4.0
+- 🎯 **Major Canvas Connection Enhancement**:
+  - **Canvas-Based Connection Detection**: Completely redesigned connection detection to use canvas edges instead of text-based links
+  - **Enhanced Canvas Integration**: Connections now established through canvas arrows rather than callout text references
+  - **Intelligent Edge Direction Detection**: Smart parsing of canvas edge data with automatic direction detection based on node positions
+- 🎨 **New Left-Right Layout Algorithm**:
+  - **Systematic Layout Paradigm**: Implemented predictable left-right-vertical arrangement patterns for graph visualization
+  - **Inlinks Positioning**: Nodes pointing to center → positioned on left side
+  - **Outlinks Positioning**: Nodes from center → positioned on right side
+  - **Bidirectional Layout**: Bidirectional connections → arranged vertically (top/bottom)
+- 🧪 **Comprehensive Algorithm Testing**:
+  - **67 Algorithm Test Scenarios**: Created complete test coverage for all connection patterns
+  - **7 Algorithm Categories**: Including cycles, stars, fans, diamonds, and complex structures
+  - **Built-in Callout Compatibility**: Uses only Obsidian built-in callout types for maximum compatibility
+  - **Auto-Generated Canvas Files**: Automatically created canvas files for each test scenario
+- ⚡ **Technical Improvements**:
+  - **Enhanced Canvas Parsing**: Direct canvas edge analysis for precise relationship detection
+  - **Improved Node Positioning**: Systematic coordinate calculation for optimal visual layouts
+  - **Streamlined Connection Logic**: Focused on direct connections through canvas arrows
+  - **Better Edge Classification**: Intelligent categorization of unidirectional vs bidirectional relationships
+- 🚀 **User Experience Enhancements**:
+  - **Visual Layout Consistency**: Predictable and intuitive arrangement patterns
+  - **Algorithm Test Coverage**: Comprehensive testing scenarios for all graph patterns
+  - **Canvas Integration**: Seamless integration with Obsidian's native canvas functionality
+
 ### Version 1.3.0
 - 🏗️ **Major Architectural Improvements**:
   - **Simplified Relationship Model**: Removed inlinks/outlinks redundancy - now uses only outlinks for cleaner data structure

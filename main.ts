@@ -719,6 +719,7 @@ class CalloutOrganizerView extends ItemView {
             this.openFile(callout.file, callout.lineNumber, e.ctrlKey || e.metaKey);
         };
         
+        
         // Add drag functionality
         calloutEl.ondragstart = (e) => {
             if (e.dataTransfer) {
@@ -736,30 +737,9 @@ class CalloutOrganizerView extends ItemView {
                 const filenameWithExt = callout.file.split('/').pop() || callout.file;
                 const filename = filenameWithExt.replace(/\.md$/, '');
                 
-                // Use standard embed format - this matches how existing callouts appear in canvas
-                const embedText = `![[${filename}#^${calloutID}]]`;
-                
+                // Use text format for simplicity and compatibility
+                const embedText = `![[${callout.file.replace(/\.md$/, '')}#^${calloutID}]]`;
                 e.dataTransfer.setData('text/plain', embedText);
-                
-                // Provide additional data formats that might influence canvas node creation
-                // Method 1: Try to mimic file drag behavior
-                const obsidianFile = this.plugin.app.vault.getAbstractFileByPath(callout.file);
-                if (obsidianFile) {
-                    e.dataTransfer.setData('text/x-obsidian-file', JSON.stringify({
-                        file: callout.file,
-                        subpath: `#^${calloutID}`,
-                        type: 'block'
-                    }));
-                }
-                
-                // Method 2: Set suggested canvas node properties using file type (like Obsidian does)
-                const suggestedNodeProps = {
-                    id: `${filename}#^${calloutID}`,
-                    type: 'file',
-                    file: `${filename}.md`,
-                    subpath: `#^${calloutID}`
-                };
-                e.dataTransfer.setData('text/canvas-node-props', JSON.stringify(suggestedNodeProps));
                 
                 e.dataTransfer.effectAllowed = 'copy';
                 
@@ -1726,10 +1706,12 @@ export default class CalloutOrganizerPlugin extends Plugin {
             }
             
             // 创建基础的 canvas 数据结构
+            // 为主节点生成临时ID
+            const mainNodeId = `node-${Date.now()}-main`;
             const canvasData = {
                 nodes: [
                     {
-                        id: `${selectedCallout.file.split('/').pop()?.replace(/\.md$/, '') || selectedCallout.file.replace(/\.md$/, '')}#^${selectedCallout.calloutID}`,
+                        id: mainNodeId,
                         type: "file",
                         file: selectedCallout.file,
                         subpath: `#^${selectedCallout.calloutID}`,
@@ -1744,104 +1726,139 @@ export default class CalloutOrganizerPlugin extends Plugin {
             };
 
             // 添加相关的 callouts 作为节点并创建边
-            const relatedData = await this.getRelatedCallouts(selectedCallout);
-            const relatedCallouts = relatedData.callouts;
-            const allConnections = relatedData.connections;
-            const mainCalloutId = `${selectedCallout.file}#^${selectedCallout.calloutID}`;
+            // 使用新范式：直接基于文本连接创建符合左右分离布局的canvas
+            const cache = await this.loadCalloutCache();
+            const allCallouts = cache?.callouts || [];
             
-            // 使用层级布局显示多层连接
+            // Helper function to get callout key
             const getCalloutKey = (callout: CalloutItem) => `${callout.file}:${callout.calloutID}`;
             const mainCalloutKey = getCalloutKey(selectedCallout);
             
-            // 为每个callout分配层级和位置
-            const layoutData = new Map<string, {callout: CalloutItem, x: number, y: number, level: number}>();
+            // 创建callout映射
+            const calloutMap = new Map<string, CalloutItem>();
+            allCallouts.forEach(callout => {
+                if (callout.calloutID) {
+                    const key = `${callout.file}:${callout.calloutID}`;
+                    calloutMap.set(key, callout);
+                }
+            });
             
-            // 计算节点层级（距离主节点的最短距离）
-            const calculateLevel = (calloutKey: string, visited = new Set<string>()): number => {
-                if (calloutKey === mainCalloutKey) return 0;
-                if (visited.has(calloutKey)) return Infinity; // 防止循环
-                visited.add(calloutKey);
-                
-                let minLevel = Infinity;
-                
-                // 检查所有连接中的最短路径
-                for (const [fromKey, toKeys] of allConnections) {
-                    if (toKeys.has(calloutKey)) {
-                        const fromLevel = calculateLevel(fromKey, new Set(visited));
-                        minLevel = Math.min(minLevel, fromLevel + 1);
+            // 分析主节点的连接关系
+            const directInlinks: CalloutItem[] = [];
+            const directOutlinks: CalloutItem[] = [];
+            const bidirectionalLinks: CalloutItem[] = [];
+            
+            // 处理主节点的outlinks（右侧节点）
+            if (selectedCallout.outlinks) {
+                selectedCallout.outlinks.forEach(([filename, calloutID]) => {
+                    const targetKey = `${filename}:${calloutID}`;
+                    const targetCallout = calloutMap.get(targetKey);
+                    if (targetCallout) {
+                        // 检查是否是双向连接
+                        const isTargetLinkingBack = targetCallout.outlinks?.some(([f, cId]) => 
+                            f === selectedCallout.file && cId === selectedCallout.calloutID
+                        );
+                        
+                        if (isTargetLinkingBack) {
+                            bidirectionalLinks.push(targetCallout);
+                        } else {
+                            directOutlinks.push(targetCallout);
+                        }
                     }
-                    if (fromKey === calloutKey) {
-                        for (const toKey of toKeys) {
-                            if (toKey === mainCalloutKey) {
-                                minLevel = Math.min(minLevel, 1);
-                            }
+                });
+            }
+            
+            // 查找指向主节点的callouts（左侧节点）
+            allCallouts.forEach(callout => {
+                if (callout.calloutID && callout.outlinks) {
+                    const hasLinkToMain = callout.outlinks.some(([filename, calloutID]) => 
+                        filename === selectedCallout.file && calloutID === selectedCallout.calloutID
+                    );
+                    
+                    if (hasLinkToMain) {
+                        const calloutKey = getCalloutKey(callout);
+                        // 检查是否已经作为双向连接处理过
+                        const alreadyProcessed = bidirectionalLinks.some(biCallout => 
+                            getCalloutKey(biCallout) === calloutKey
+                        );
+                        
+                        if (!alreadyProcessed) {
+                            directInlinks.push(callout);
                         }
                     }
                 }
-                
-                return minLevel;
-            };
-            
-            // 为每个相关callout计算布局信息
-            const calloutsByLevel = new Map<number, CalloutItem[]>();
-            relatedCallouts.forEach((callout: CalloutItem) => {
-                const calloutKey = getCalloutKey(callout);
-                const level = calculateLevel(calloutKey);
-                
-                if (!calloutsByLevel.has(level)) {
-                    calloutsByLevel.set(level, []);
-                }
-                calloutsByLevel.get(level)!.push(callout);
             });
             
-            // 布局节点
-            const nodeSpacing = 250;
-            const levelSpacing = 500;
+            // 新的布局算法：左右分离式布局
+            const layoutData = new Map<string, {callout: CalloutItem, x: number, y: number, level: number, side: 'left' | 'right' | 'bidirectional'}>();
             
-            calloutsByLevel.forEach((callouts, level) => {
-                callouts.forEach((callout, index) => {
-                    const calloutKey = getCalloutKey(callout);
-                    const totalAtLevel = callouts.length;
-                    
-                    // 计算x位置（左右分布）
-                    let x: number;
-                    if (level === 1) {
-                        // 第一层：左右分布
-                        x = (index - (totalAtLevel - 1) / 2) * levelSpacing;
-                    } else {
-                        // 更远层级：环形分布
-                        const angle = (index / totalAtLevel) * 2 * Math.PI;
-                        x = Math.cos(angle) * level * levelSpacing;
-                    }
-                    
-                    // 计算y位置
-                    let y: number;
-                    if (level === 1) {
-                        y = (index - (totalAtLevel - 1) / 2) * nodeSpacing;
-                    } else {
-                        const angle = (index / totalAtLevel) * 2 * Math.PI;
-                        y = Math.sin(angle) * level * levelSpacing;
-                    }
-                    
-                    layoutData.set(calloutKey, {
-                        callout,
-                        x,
-                        y,
-                        level
-                    });
+            // 布局参数
+            const nodeSpacing = 280;
+            const levelSpacing = 600;
+            const bidirectionalSpacing = 150;
+            
+            // 左侧布局：inlinks
+            directInlinks.forEach((callout, index) => {
+                const calloutKey = getCalloutKey(callout);
+                const totalInlinks = directInlinks.length;
+                const x = -levelSpacing;
+                const y = (index - (totalInlinks - 1) / 2) * nodeSpacing;
+                
+                layoutData.set(calloutKey, {
+                    callout,
+                    x,
+                    y,
+                    level: 1,
+                    side: 'left'
                 });
             });
             
-            // 添加所有节点到canvas
-            layoutData.forEach(({callout, x, y, level}) => {
-                const calloutId = `${callout.file.split('/').pop()?.replace(/\.md$/, '') || callout.file.replace(/\.md$/, '')}#^${callout.calloutID}`;
+            // 右侧布局：outlinks
+            directOutlinks.forEach((callout, index) => {
+                const calloutKey = getCalloutKey(callout);
+                const totalOutlinks = directOutlinks.length;
+                const x = levelSpacing;
+                const y = (index - (totalOutlinks - 1) / 2) * nodeSpacing;
                 
+                layoutData.set(calloutKey, {
+                    callout,
+                    x,
+                    y,
+                    level: 1,
+                    side: 'right'
+                });
+            });
+            
+            // 双向连接布局：上下排列在中心附近
+            bidirectionalLinks.forEach((callout, index) => {
+                const calloutKey = getCalloutKey(callout);
+                const totalBidirectional = bidirectionalLinks.length;
+                const x = 0; // 居中
+                const y = (index - (totalBidirectional - 1) / 2) * bidirectionalSpacing + 
+                         (index % 2 === 0 ? -250 : 250); // 上下交替排列
+                
+                layoutData.set(calloutKey, {
+                    callout,
+                    x,
+                    y,
+                    level: 1,
+                    side: 'bidirectional'
+                });
+            });
+            
+            
+            // 添加所有节点到canvas
+            let nodeIdCounter = 0;
+            layoutData.forEach(({callout, x, y, level}) => {
                 // 根据层级调整节点大小
                 const nodeWidth = Math.max(300, 400 - level * 25);
                 const nodeHeight = Math.max(120, 200 - level * 20);
                 
+                // 为每个节点生成临时ID
+                const nodeId = `node-${Date.now()}-${++nodeIdCounter}`;
+                
                 canvasData.nodes.push({
-                    id: calloutId,
+                    id: nodeId,
                     type: "file",
                     file: callout.file,
                     subpath: `#^${callout.calloutID}`,
@@ -1853,34 +1870,85 @@ export default class CalloutOrganizerPlugin extends Plugin {
                 });
             });
             
-            // 添加所有连接边
+            // 基于新范式创建连接边
             let edgeId = 0;
-            allConnections.forEach((toKeys, fromKey) => {
-                toKeys.forEach(toKey => {
-                    const fromCallout = relatedCallouts.find(c => getCalloutKey(c) === fromKey) || 
-                                       (fromKey === mainCalloutKey ? selectedCallout : null);
-                    const toCallout = relatedCallouts.find(c => getCalloutKey(c) === toKey) ||
-                                     (toKey === mainCalloutKey ? selectedCallout : null);
-                    
-                    if (fromCallout && toCallout) {
-                        const fromId = `${fromCallout.file.split('/').pop()?.replace(/\.md$/, '') || fromCallout.file.replace(/\.md$/, '')}#^${fromCallout.calloutID}`;
-                        const toId = `${toCallout.file.split('/').pop()?.replace(/\.md$/, '') || toCallout.file.replace(/\.md$/, '')}#^${toCallout.calloutID}`;
-                        
-                        // 避免重复边（检查反向连接）
-                        const reverseEdgeExists = Array.from(allConnections.get(toKey) || []).includes(fromKey);
-                        
+            const nodeMap = new Map<string, any>(); // Map from "file:calloutID" to node
+            
+            // 为每个节点创建映射
+            canvasData.nodes.forEach((node: any) => {
+                if (node.type === "file" && node.file && node.subpath) {
+                    const fileMatch = node.subpath.match(/^#\^(.+)$/);
+                    if (fileMatch) {
+                        const calloutID = fileMatch[1];
+                        const key = `${node.file}:${calloutID}`;
+                        nodeMap.set(key, node);
+                    }
+                }
+            });
+            
+            const mainNodeKey = `${selectedCallout.file}:${selectedCallout.calloutID}`;
+            const mainNode = nodeMap.get(mainNodeKey);
+            
+            if (mainNode) {
+                // 创建从左侧节点（inlinks）到主节点的连接
+                directInlinks.forEach(callout => {
+                    const calloutKey = getCalloutKey(callout);
+                    const fromNode = nodeMap.get(calloutKey);
+                    if (fromNode) {
                         (canvasData.edges as any[]).push({
                             id: `edge-${++edgeId}`,
-                            fromNode: fromId,
+                            fromNode: fromNode.id,
                             fromSide: "right",
-                            toNode: toId,
-                            toSide: "left",
-                            // 双向连接时添加特殊标识
-                            label: reverseEdgeExists ? "↔" : undefined
+                            toNode: mainNode.id,
+                            toSide: "left"
                         });
                     }
                 });
-            });
+                
+                // 创建从主节点到右侧节点（outlinks）的连接
+                directOutlinks.forEach(callout => {
+                    const calloutKey = getCalloutKey(callout);
+                    const toNode = nodeMap.get(calloutKey);
+                    if (toNode) {
+                        (canvasData.edges as any[]).push({
+                            id: `edge-${++edgeId}`,
+                            fromNode: mainNode.id,
+                            fromSide: "right",
+                            toNode: toNode.id,
+                            toSide: "left"
+                        });
+                    }
+                });
+                
+                // 创建双向连接（主节点与上下节点）
+                bidirectionalLinks.forEach(callout => {
+                    const calloutKey = getCalloutKey(callout);
+                    const biNode = nodeMap.get(calloutKey);
+                    if (biNode) {
+                        const layoutInfo = layoutData.get(calloutKey);
+                        const isAbove = layoutInfo && layoutInfo.y < 0;
+                        
+                        // 主节点到双向节点
+                        (canvasData.edges as any[]).push({
+                            id: `edge-${++edgeId}`,
+                            fromNode: mainNode.id,
+                            fromSide: isAbove ? "top" : "bottom",
+                            toNode: biNode.id,
+                            toSide: isAbove ? "bottom" : "top"
+                        });
+                        
+                        // 双向节点到主节点  
+                        (canvasData.edges as any[]).push({
+                            id: `edge-${++edgeId}`,
+                            fromNode: biNode.id,
+                            fromSide: isAbove ? "bottom" : "top",
+                            toNode: mainNode.id,
+                            toSide: isAbove ? "top" : "bottom"
+                        });
+                    }
+                });
+            }
+            
 
             // 始终重新生成canvas文件以反映最新的连接关系
             try {
@@ -1892,8 +1960,9 @@ export default class CalloutOrganizerPlugin extends Plugin {
                     console.log(`Deleted existing canvas file: ${canvasPath}`);
                 }
                 
-                // 创建新的canvas文件
-                canvasFile = await this.app.vault.create(canvasPath, JSON.stringify(canvasData, null, 2));
+                // 创建新的canvas文件 (使用Obsidian标准格式)
+                const canvasContent = JSON.stringify(canvasData, null, '\t');
+                canvasFile = await this.app.vault.create(canvasPath, canvasContent);
                 
                 if (canvasFile) {
                     const leaf = this.app.workspace.getUnpinnedLeaf();
@@ -1913,7 +1982,100 @@ export default class CalloutOrganizerPlugin extends Plugin {
         }
     }
 
+    /**
+     * 从canvas edges中读取连接关系
+     */
+    private async getCanvasConnections(selectedCallout: CalloutItem): Promise<{callouts: CalloutItem[], connections: Map<string, Set<string>>}> {
+        const cache = await this.loadCalloutCache();
+        const allCallouts = cache?.callouts || [];
+        
+        // 创建[filename, calloutID]到callout的映射
+        const calloutMap = new Map<string, CalloutItem>();
+        allCallouts.forEach(callout => {
+            if (callout.calloutID) {
+                const key = `${callout.file}:${callout.calloutID}`;
+                calloutMap.set(key, callout);
+            }
+        });
+        
+        const relatedCallouts: CalloutItem[] = [];
+        const connections = new Map<string, Set<string>>(); // fromKey -> Set<toKey>
+        
+        // Helper function to get callout key
+        const getCalloutKey = (callout: CalloutItem) => `${callout.file}:${callout.calloutID}`;
+        
+        // 查找包含选定callout的canvas文件
+        const sourceFilename = selectedCallout.file?.split('/').pop()?.replace('.md', '') || 'unknown';
+        const canvasFileName = `callout-${sourceFilename}-${selectedCallout.calloutID || 'center'}.canvas`;
+        const canvasPath = `${this.settings.canvasStorageFolder}/${canvasFileName}`;
+        
+        try {
+            const canvasFile = this.app.vault.getAbstractFileByPath(canvasPath);
+            if (canvasFile && canvasFile instanceof TFile) {
+                const canvasContent = await this.app.vault.read(canvasFile);
+                const canvasData = JSON.parse(canvasContent);
+                
+                // 创建节点ID到callout的映射
+                const nodeToCallout = new Map<string, CalloutItem>();
+                if (canvasData.nodes) {
+                    canvasData.nodes.forEach((node: any) => {
+                        if (node.type === "file" && node.file && node.subpath) {
+                            const match = node.subpath.match(/^#\^(.+)$/);
+                            if (match) {
+                                const calloutID = match[1];
+                                const key = `${node.file}:${calloutID}`;
+                                const callout = calloutMap.get(key);
+                                if (callout) {
+                                    nodeToCallout.set(node.id, callout);
+                                }
+                            }
+                        }
+                    });
+                }
+                
+                // 处理edges建立连接关系
+                if (canvasData.edges) {
+                    canvasData.edges.forEach((edge: any) => {
+                        const fromCallout = nodeToCallout.get(edge.fromNode);
+                        const toCallout = nodeToCallout.get(edge.toNode);
+                        
+                        if (fromCallout && toCallout) {
+                            const fromKey = getCalloutKey(fromCallout);
+                            const toKey = getCalloutKey(toCallout);
+                            
+                            // 建立连接关系
+                            if (!connections.has(fromKey)) {
+                                connections.set(fromKey, new Set());
+                            }
+                            connections.get(fromKey)!.add(toKey);
+                            
+                            // 添加相关callouts（排除选定的callout）
+                            const selectedKey = getCalloutKey(selectedCallout);
+                            if (fromKey !== selectedKey && !relatedCallouts.some(c => getCalloutKey(c) === fromKey)) {
+                                relatedCallouts.push(fromCallout);
+                            }
+                            if (toKey !== selectedKey && !relatedCallouts.some(c => getCalloutKey(c) === toKey)) {
+                                relatedCallouts.push(toCallout);
+                            }
+                        }
+                    });
+                }
+            }
+        } catch (error) {
+            console.error('Error reading canvas file:', error);
+            // 如果canvas文件不存在或读取失败，回退到原来的方法
+            return this.getRelatedCalloutsFromLinks(selectedCallout);
+        }
+        
+        return { callouts: relatedCallouts, connections };
+    }
+
     private async getRelatedCallouts(selectedCallout: CalloutItem): Promise<{callouts: CalloutItem[], connections: Map<string, Set<string>>}> {
+        // 优先使用canvas连接方式
+        return this.getCanvasConnections(selectedCallout);
+    }
+
+    private async getRelatedCalloutsFromLinks(selectedCallout: CalloutItem): Promise<{callouts: CalloutItem[], connections: Map<string, Set<string>>}> {
         const cache = await this.loadCalloutCache();
         const allCallouts = cache?.callouts || [];
         
@@ -2009,38 +2171,17 @@ export default class CalloutOrganizerPlugin extends Plugin {
      * 根据callout类型获取对应的canvas颜色
      */
     private getCanvasColorForCallout(calloutType: string): string {
+        // 直接从用户设置中读取callout颜色
         const calloutColor = this.settings.calloutColors[calloutType]?.color;
         if (!calloutColor) {
-            return "1"; // 默认颜色
+            return "#086ddd"; // 默认蓝色
         }
         
-        // 将十六进制颜色映射到Obsidian canvas颜色索引
-        // Obsidian canvas颜色索引：1-6对应不同颜色
-        const colorMap: Record<string, string> = {
-            "#086ddd": "1", // 蓝色 - note, info等
-            "#08b94e": "2", // 绿色 - success, check等  
-            "#ec7500": "3", // 橙色 - warning, attention等
-            "#e93147": "4", // 红色 - error, danger等
-            "#7852ee": "5", // 紫色 - example等
-            "#00bfbc": "6", // 青色 - tip, important等
-        };
-        
-        // 首先尝试精确匹配
-        if (colorMap[calloutColor.toLowerCase()]) {
-            return colorMap[calloutColor.toLowerCase()];
-        }
-        
-        // 如果没有精确匹配，根据颜色相似性选择
-        const color = calloutColor.toLowerCase();
-        if (color.includes("086d") || color.includes("2ea8")) return "1"; // 蓝色系
-        if (color.includes("08b9") || color.includes("5fb2")) return "2"; // 绿色系
-        if (color.includes("ec75") || color.includes("f5ca") || color.includes("f198")) return "3"; // 橙/黄色系
-        if (color.includes("e931") || color.includes("ff66")) return "4"; // 红色系
-        if (color.includes("785") || color.includes("e56e") || color.includes("a28a") || color.includes("ff66")) return "5"; // 紫色系
-        if (color.includes("00bf") || color.includes("9e9e")) return "6"; // 青/灰色系
-        
-        return "1"; // 默认颜色
+        // 直接返回用户配置的hex颜色，让canvas使用实际的颜色值
+        return calloutColor;
     }
+
+    
 
 
     /**
@@ -2078,7 +2219,6 @@ export default class CalloutOrganizerPlugin extends Plugin {
                     calloutMap.set(key, callout);
                 }
             });
-
             // 获取canvas存储文件夹中的所有canvas文件
             const canvasFolder = this.app.vault.getAbstractFileByPath(this.settings.canvasStorageFolder);
             if (!canvasFolder || !(canvasFolder instanceof TFolder)) {
@@ -2103,42 +2243,54 @@ export default class CalloutOrganizerPlugin extends Plugin {
                         continue;
                     }
                     
-                    const expectedFromNodeId = `${targetCallout.filename}#^${targetCallout.calloutID}`;
-                    console.log(`Processing canvas ${canvasFile.name}, target fromNode: ${expectedFromNodeId}`);
                     
                     if (canvasData.edges && Array.isArray(canvasData.edges) && canvasData.nodes && Array.isArray(canvasData.nodes)) {
                         // 创建节点ID到[filename, calloutID]的映射
                         const nodeIdToCallout = new Map<string, [string, string]>();
+                        let targetFromNodeId: string | null = null;
                         
                         canvasData.nodes.forEach((node: any) => {
-                            if (node.type === 'text') {
-                                // 方法1: 直接从节点ID解析（新格式：filename#^calloutID）
-                                const nodeIdMatch = node.id.match(/^([^#]+)#\^(.+)$/);
-                                if (nodeIdMatch) {
-                                    const filename = nodeIdMatch[1];
-                                    const calloutID = nodeIdMatch[2];
+                            if (node.type === 'text' && node.text) {
+                                // 从嵌入链接解析文本节点
+                                const embedMatch = node.text.match(/!\[\[([^#\]]+)#\^([^\]]+)\]\]/);
+                                if (embedMatch) {
+                                    const filename = embedMatch[1];
+                                    const calloutID = embedMatch[2];
                                     nodeIdToCallout.set(node.id, [filename, calloutID]);
-                                } else if (node.text) {
-                                    // 方法2: 从嵌入链接解析（向后兼容旧格式）
-                                    const embedMatch = node.text.match(/!\[\[([^#\]]+)#\^([^\]]+)\]\]/);
-                                    if (embedMatch) {
-                                        const filename = embedMatch[1];
-                                        const calloutID = embedMatch[2];
-                                        nodeIdToCallout.set(node.id, [filename, calloutID]);
+                                    
+                                    // 检查是否是我们要找的源节点 (比较时去掉.md扩展名)
+                                    const targetFilename = targetCallout.filename.replace(/\.md$/, '');
+                                    if (filename === targetFilename && calloutID === targetCallout.calloutID) {
+                                        targetFromNodeId = node.id;
+                                    }
+                                }
+                            } else if (node.type === 'file' && node.file && node.subpath) {
+                                // 处理文件类型节点
+                                const fileMatch = node.subpath.match(/^#\^(.+)$/);
+                                if (fileMatch) {
+                                    const filename = node.file.replace(/\.md$/, '');
+                                    const calloutID = fileMatch[1];
+                                    nodeIdToCallout.set(node.id, [filename, calloutID]);
+                                    
+                                    // 检查是否是我们要找的源节点 (比较时去掉.md扩展名)
+                                    const targetFilename = targetCallout.filename.replace(/\.md$/, '');
+                                    if (filename === targetFilename && calloutID === targetCallout.calloutID) {
+                                        targetFromNodeId = node.id;
                                     }
                                 }
                             }
                         });
                         
-                        // 分析边（连接）- 只处理以expectedFromNodeId为起点的edge
-                        const targetEdges = canvasData.edges.filter((edge: any) => edge.fromNode === expectedFromNodeId);
-                        console.log(`Processing ${targetEdges.length} edges from ${expectedFromNodeId} in canvas ${canvasFile.path}`);
+                        if (!targetFromNodeId) {
+                            continue;
+                        }
                         
-                        targetEdges.forEach((edge: any, edgeIndex: number) => {
+                        // 分析边（连接）- 使用找到的实际节点ID
+                        const targetEdges = canvasData.edges.filter((edge: any) => edge.fromNode === targetFromNodeId);
+                        
+                        targetEdges.forEach((edge: any) => {
                             const fromNodeId = edge.fromNode;
                             const toNodeId = edge.toNode;
-                            
-                            console.log(`Edge ${edgeIndex + 1}: ${fromNodeId} -> ${toNodeId}`);
                             
                             const fromCalloutInfo = nodeIdToCallout.get(fromNodeId);
                             const toCalloutInfo = nodeIdToCallout.get(toNodeId);
@@ -2147,26 +2299,20 @@ export default class CalloutOrganizerPlugin extends Plugin {
                                 const [fromFile, fromCalloutID] = fromCalloutInfo;
                                 const [toFile, toCalloutID] = toCalloutInfo;
                                 
-                                console.log(`  Mapping: [${fromFile}:${fromCalloutID}] -> [${toFile}:${toCalloutID}]`);
-                                
-                                const fromKey = `${fromFile}:${fromCalloutID}`;
-                                const fromCallout = calloutMap.get(fromKey);
+                                // Add .md extension to match callout map key format
+                                const fromKeyWithExt = `${fromFile}.md:${fromCalloutID}`;
+                                const fromCallout = calloutMap.get(fromKeyWithExt);
                                 
                                 if (fromCallout) {
                                     // 只创建outlinks，移除inlinks冗余
                                     fromCallout.outlinks = fromCallout.outlinks || [];
-                                    const outLinkExists = fromCallout.outlinks.some(([file, id]) => file === toFile && id === toCalloutID);
+                                    // Add .md extension to toFile for consistency  
+                                    const toFileWithExt = `${toFile}.md`;
+                                    const outLinkExists = fromCallout.outlinks.some(([file, id]) => file === toFileWithExt && id === toCalloutID);
                                     if (!outLinkExists) {
-                                        fromCallout.outlinks.push([toFile, toCalloutID]);
-                                        console.log(`  Added outlink: ${fromFile}:${fromCalloutID} -> ${toFile}:${toCalloutID}`);
-                                    } else {
-                                        console.log(`  Outlink already exists: ${fromFile}:${fromCalloutID} -> ${toFile}:${toCalloutID}`);
+                                        fromCallout.outlinks.push([toFileWithExt, toCalloutID]);
                                     }
-                                } else {
-                                    console.log(`  Could not find fromCallout in map: ${fromKey}`);
                                 }
-                            } else {
-                                console.log(`  Could not resolve node IDs: from=${!!fromCalloutInfo}, to=${!!toCalloutInfo}`);
                             }
                         });
                     }
@@ -2208,6 +2354,8 @@ export default class CalloutOrganizerPlugin extends Plugin {
                 // Use setTimeout to allow canvas to create the node first
                 setTimeout(() => {
                     this.fixCanvasNodeId(canvasEl, props);
+                    // Remove duplicate text nodes that might have been created from text/plain data
+                    this.removeDuplicateTextNodes(canvasEl, props);
                     // Additional deselection after a longer delay to ensure it takes effect
                     setTimeout(() => {
                         this.deselectAllCanvasNodes();
@@ -2332,6 +2480,70 @@ export default class CalloutOrganizerPlugin extends Plugin {
             }
         } catch (error) {
             console.error('Error fixing canvas node ID:', error);
+        }
+    }
+
+    /**
+     * Remove duplicate text nodes that contain embed links matching our file nodes
+     */
+    private async removeDuplicateTextNodes(canvasEl: Element, nodeProps: any) {
+        try {
+            // Find the active canvas view
+            const activeLeaf = this.app.workspace.activeLeaf;
+            if (activeLeaf && activeLeaf.view && activeLeaf.view.getViewType() === 'canvas') {
+                const canvasView = activeLeaf.view as any;
+                const canvas = canvasView.canvas;
+                
+                if (!canvas || !canvas.nodes) return;
+                
+                // Create the expected embed text for this callout
+                const expectedEmbedText = `![[${nodeProps.file.replace(/\.md$/, '')}${nodeProps.subpath}]]`;
+                
+                // Find text nodes that contain this embed and remove them if we have a matching file node
+                const nodesToRemove: string[] = [];
+                let hasMatchingFileNode = false;
+                
+                // First, check if we have a file node with matching file+subpath
+                for (const [nodeId, node] of canvas.nodes) {
+                    if (node.type === 'file' && 
+                        node.file === nodeProps.file && 
+                        node.subpath === nodeProps.subpath) {
+                        hasMatchingFileNode = true;
+                        break;
+                    }
+                }
+                
+                // If we found a matching file node, remove text nodes with the same embed
+                if (hasMatchingFileNode) {
+                    for (const [nodeId, node] of canvas.nodes) {
+                        if (node.type === 'text' && 
+                            node.text && 
+                            node.text.includes(expectedEmbedText)) {
+                            nodesToRemove.push(nodeId);
+                        }
+                    }
+                }
+                
+                // Remove the duplicate text nodes
+                for (const nodeId of nodesToRemove) {
+                    console.log(`Removing duplicate text node: ${nodeId}`);
+                    canvas.nodes.delete(nodeId);
+                }
+                
+                if (nodesToRemove.length > 0) {
+                    // Trigger canvas update and save
+                    if (canvas.requestSave) {
+                        canvas.requestSave();
+                    }
+                    
+                    // Force canvas to re-render
+                    if (canvas.markDirty) {
+                        canvas.markDirty();
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('Error removing duplicate text nodes:', error);
         }
     }
 
