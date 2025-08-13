@@ -1,336 +1,8 @@
 {
   "version": "1.3",
-  "timestamp": 1755015856037,
+  "timestamp": 1755044808285,
   "vaultPath": "测试仓库",
   "callouts": [
-    {
-      "file": "Obsidian Built-in Callouts.md",
-      "type": "note",
-      "title": "Title",
-      "content": "Contents",
-      "lineNumber": 4,
-      "fileModTime": "2025-08-07 15:04:29",
-      "calloutCreatedTime": "2025-08-07 15:04:29",
-      "calloutModifyTime": "2025-08-07 15:04:29",
-      "inlinks": [],
-      "outlinks": []
-    },
-    {
-      "file": "Obsidian Built-in Callouts.md",
-      "type": "abstract",
-      "title": "Title",
-      "content": "Contents",
-      "lineNumber": 9,
-      "fileModTime": "2025-08-07 15:04:29",
-      "calloutCreatedTime": "2025-08-07 15:04:29",
-      "calloutModifyTime": "2025-08-07 15:04:29",
-      "inlinks": [],
-      "outlinks": []
-    },
-    {
-      "file": "Obsidian Built-in Callouts.md",
-      "type": "summary",
-      "title": "Title",
-      "content": "Contents",
-      "lineNumber": 15,
-      "fileModTime": "2025-08-07 15:04:29",
-      "calloutCreatedTime": "2025-08-12 10:38:39",
-      "calloutModifyTime": "2025-08-12 10:38:39",
-      "calloutID": "summary-uc8im1",
-      "inlinks": [],
-      "outlinks": []
-    },
-    {
-      "file": "Obsidian Built-in Callouts.md",
-      "type": "tldr",
-      "title": "Title",
-      "content": "Contents",
-      "lineNumber": 21,
-      "fileModTime": "2025-08-07 15:04:29",
-      "calloutCreatedTime": "2025-08-12 10:38:39",
-      "calloutModifyTime": "2025-08-12 10:38:39",
-      "calloutID": "tldr-1qu612",
-      "inlinks": [],
-      "outlinks": []
-    },
-    {
-      "file": "Obsidian Built-in Callouts.md",
-      "type": "info",
-      "title": "Title",
-      "content": "Contents",
-      "lineNumber": 27,
-      "fileModTime": "2025-08-07 15:04:29",
-      "calloutCreatedTime": "2025-08-12 10:38:39",
-      "calloutModifyTime": "2025-08-12 10:38:39",
-      "calloutID": "info-luihej",
-      "inlinks": [],
-      "outlinks": []
-    },
-    {
-      "file": "Obsidian Built-in Callouts.md",
-      "type": "todo",
-      "title": "Title",
-      "content": "Contents",
-      "lineNumber": 33,
-      "fileModTime": "2025-08-07 15:04:29",
-      "calloutCreatedTime": "2025-08-12 10:38:39",
-      "calloutModifyTime": "2025-08-12 10:38:39",
-      "calloutID": "todo-h3dzun",
-      "inlinks": [],
-      "outlinks": []
-    },
-    {
-      "file": "Obsidian Built-in Callouts.md",
-      "type": "tip",
-      "title": "Title",
-      "content": "Contents",
-      "lineNumber": 38,
-      "fileModTime": "2025-08-07 15:04:29",
-      "calloutCreatedTime": "2025-08-07 15:04:29",
-      "calloutModifyTime": "2025-08-07 15:04:29",
-      "inlinks": [],
-      "outlinks": []
-    },
-    {
-      "file": "Obsidian Built-in Callouts.md",
-      "type": "hint",
-      "title": "Title",
-      "content": "Contents",
-      "lineNumber": 43,
-      "fileModTime": "2025-08-07 15:04:29",
-      "calloutCreatedTime": "2025-08-07 15:04:29",
-      "calloutModifyTime": "2025-08-07 15:04:29",
-      "inlinks": [],
-      "outlinks": []
-    },
-    {
-      "file": "Obsidian Built-in Callouts.md",
-      "type": "important",
-      "title": "Title",
-      "content": "Contents",
-      "lineNumber": 48,
-      "fileModTime": "2025-08-07 15:04:29",
-      "calloutCreatedTime": "2025-08-07 15:04:29",
-      "calloutModifyTime": "2025-08-07 15:04:29",
-      "inlinks": [],
-      "outlinks": []
-    },
-    {
-      "file": "Obsidian Built-in Callouts.md",
-      "type": "success",
-      "title": "Title",
-      "content": "Contents",
-      "lineNumber": 53,
-      "fileModTime": "2025-08-07 15:04:29",
-      "calloutCreatedTime": "2025-08-07 15:04:29",
-      "calloutModifyTime": "2025-08-07 15:04:29",
-      "inlinks": [],
-      "outlinks": []
-    },
-    {
-      "file": "Obsidian Built-in Callouts.md",
-      "type": "check",
-      "title": "Title",
-      "content": "Contents",
-      "lineNumber": 58,
-      "fileModTime": "2025-08-07 15:04:29",
-      "calloutCreatedTime": "2025-08-07 15:04:29",
-      "calloutModifyTime": "2025-08-07 15:04:29",
-      "inlinks": [],
-      "outlinks": []
-    },
-    {
-      "file": "Obsidian Built-in Callouts.md",
-      "type": "done",
-      "title": "Title",
-      "content": "Contents",
-      "lineNumber": 63,
-      "fileModTime": "2025-08-07 15:04:29",
-      "calloutCreatedTime": "2025-08-07 15:04:29",
-      "calloutModifyTime": "2025-08-07 15:04:29",
-      "inlinks": [],
-      "outlinks": []
-    },
-    {
-      "file": "Obsidian Built-in Callouts.md",
-      "type": "question",
-      "title": "Title",
-      "content": "Contents",
-      "lineNumber": 68,
-      "fileModTime": "2025-08-07 15:04:29",
-      "calloutCreatedTime": "2025-08-07 15:04:29",
-      "calloutModifyTime": "2025-08-07 15:04:29",
-      "inlinks": [],
-      "outlinks": []
-    },
-    {
-      "file": "Obsidian Built-in Callouts.md",
-      "type": "help",
-      "title": "Title",
-      "content": "Contents",
-      "lineNumber": 73,
-      "fileModTime": "2025-08-07 15:04:29",
-      "calloutCreatedTime": "2025-08-07 15:04:29",
-      "calloutModifyTime": "2025-08-07 15:04:29",
-      "inlinks": [],
-      "outlinks": []
-    },
-    {
-      "file": "Obsidian Built-in Callouts.md",
-      "type": "faq",
-      "title": "Title",
-      "content": "Contents",
-      "lineNumber": 78,
-      "fileModTime": "2025-08-07 15:04:29",
-      "calloutCreatedTime": "2025-08-07 15:04:29",
-      "calloutModifyTime": "2025-08-07 15:04:29",
-      "inlinks": [],
-      "outlinks": []
-    },
-    {
-      "file": "Obsidian Built-in Callouts.md",
-      "type": "warning",
-      "title": "Title",
-      "content": "Contents",
-      "lineNumber": 83,
-      "fileModTime": "2025-08-07 15:04:29",
-      "calloutCreatedTime": "2025-08-07 15:04:29",
-      "calloutModifyTime": "2025-08-07 15:04:29",
-      "inlinks": [],
-      "outlinks": []
-    },
-    {
-      "file": "Obsidian Built-in Callouts.md",
-      "type": "caution",
-      "title": "Title",
-      "content": "Contents",
-      "lineNumber": 88,
-      "fileModTime": "2025-08-07 15:04:29",
-      "calloutCreatedTime": "2025-08-07 15:04:29",
-      "calloutModifyTime": "2025-08-07 15:04:29",
-      "inlinks": [],
-      "outlinks": []
-    },
-    {
-      "file": "Obsidian Built-in Callouts.md",
-      "type": "attention",
-      "title": "Title",
-      "content": "Contents",
-      "lineNumber": 93,
-      "fileModTime": "2025-08-07 15:04:29",
-      "calloutCreatedTime": "2025-08-07 15:04:29",
-      "calloutModifyTime": "2025-08-07 15:04:29",
-      "inlinks": [],
-      "outlinks": []
-    },
-    {
-      "file": "Obsidian Built-in Callouts.md",
-      "type": "failure",
-      "title": "Title",
-      "content": "Contents",
-      "lineNumber": 98,
-      "fileModTime": "2025-08-07 15:04:29",
-      "calloutCreatedTime": "2025-08-07 15:04:29",
-      "calloutModifyTime": "2025-08-07 15:04:29",
-      "inlinks": [],
-      "outlinks": []
-    },
-    {
-      "file": "Obsidian Built-in Callouts.md",
-      "type": "fail",
-      "title": "Title",
-      "content": "Contents",
-      "lineNumber": 103,
-      "fileModTime": "2025-08-07 15:04:29",
-      "calloutCreatedTime": "2025-08-07 15:04:29",
-      "calloutModifyTime": "2025-08-07 15:04:29",
-      "inlinks": [],
-      "outlinks": []
-    },
-    {
-      "file": "Obsidian Built-in Callouts.md",
-      "type": "missing",
-      "title": "Title",
-      "content": "Contents",
-      "lineNumber": 108,
-      "fileModTime": "2025-08-07 15:04:29",
-      "calloutCreatedTime": "2025-08-07 15:04:29",
-      "calloutModifyTime": "2025-08-07 15:04:29",
-      "inlinks": [],
-      "outlinks": []
-    },
-    {
-      "file": "Obsidian Built-in Callouts.md",
-      "type": "danger",
-      "title": "Title",
-      "content": "Contents",
-      "lineNumber": 113,
-      "fileModTime": "2025-08-07 15:04:29",
-      "calloutCreatedTime": "2025-08-07 15:04:29",
-      "calloutModifyTime": "2025-08-07 15:04:29",
-      "inlinks": [],
-      "outlinks": []
-    },
-    {
-      "file": "Obsidian Built-in Callouts.md",
-      "type": "error",
-      "title": "Title",
-      "content": "Contents",
-      "lineNumber": 118,
-      "fileModTime": "2025-08-07 15:04:29",
-      "calloutCreatedTime": "2025-08-07 15:04:29",
-      "calloutModifyTime": "2025-08-07 15:04:29",
-      "inlinks": [],
-      "outlinks": []
-    },
-    {
-      "file": "Obsidian Built-in Callouts.md",
-      "type": "bug",
-      "title": "Title",
-      "content": "Contents",
-      "lineNumber": 123,
-      "fileModTime": "2025-08-07 15:04:29",
-      "calloutCreatedTime": "2025-08-07 15:04:29",
-      "calloutModifyTime": "2025-08-07 15:04:29",
-      "inlinks": [],
-      "outlinks": []
-    },
-    {
-      "file": "Obsidian Built-in Callouts.md",
-      "type": "example",
-      "title": "Title",
-      "content": "Contents",
-      "lineNumber": 128,
-      "fileModTime": "2025-08-07 15:04:29",
-      "calloutCreatedTime": "2025-08-07 15:04:29",
-      "calloutModifyTime": "2025-08-07 15:04:29",
-      "inlinks": [],
-      "outlinks": []
-    },
-    {
-      "file": "Obsidian Built-in Callouts.md",
-      "type": "quote",
-      "title": "Title",
-      "content": "Contents",
-      "lineNumber": 133,
-      "fileModTime": "2025-08-07 15:04:29",
-      "calloutCreatedTime": "2025-08-07 15:04:29",
-      "calloutModifyTime": "2025-08-07 15:04:29",
-      "inlinks": [],
-      "outlinks": []
-    },
-    {
-      "file": "Obsidian Built-in Callouts.md",
-      "type": "cite",
-      "title": "Title",
-      "content": "Contents",
-      "lineNumber": 138,
-      "fileModTime": "2025-08-07 15:04:29",
-      "calloutCreatedTime": "2025-08-07 15:04:29",
-      "calloutModifyTime": "2025-08-07 15:04:29",
-      "inlinks": [],
-      "outlinks": []
-    },
     {
       "file": "Test.md",
       "type": "note",
@@ -341,20 +13,10 @@
       "calloutCreatedTime": "2025-08-12 23:26:18",
       "calloutModifyTime": "2025-08-12 23:26:18",
       "calloutID": "a",
-      "inlinks": [
-        [
-          "Test.md",
-          "b"
-        ]
-      ],
       "outlinks": [
         [
           "Test.md",
           "b"
-        ],
-        [
-          "Test.md",
-          "c"
         ]
       ]
     },
@@ -368,20 +30,10 @@
       "calloutCreatedTime": "2025-08-12 23:26:18",
       "calloutModifyTime": "2025-08-12 23:26:18",
       "calloutID": "b",
-      "inlinks": [
-        [
-          "Test.md",
-          "a"
-        ]
-      ],
       "outlinks": [
         [
           "Test.md",
           "c"
-        ],
-        [
-          "Test.md",
-          "a"
         ]
       ]
     },
@@ -395,16 +47,307 @@
       "calloutCreatedTime": "2025-08-12 23:48:24",
       "calloutModifyTime": "2025-08-12 23:48:24",
       "calloutID": "c",
-      "inlinks": [
-        [
-          "Test.md",
-          "b"
-        ],
-        [
-          "Test.md",
-          "a"
-        ]
-      ],
+      "outlinks": []
+    },
+    {
+      "file": "Obsidian Built-in Callouts.md",
+      "type": "note",
+      "title": "Title",
+      "content": "Contents",
+      "lineNumber": 4,
+      "fileModTime": "2025-08-07 15:04:29",
+      "calloutCreatedTime": "2025-08-07 15:04:29",
+      "calloutModifyTime": "2025-08-07 15:04:29",
+      "outlinks": []
+    },
+    {
+      "file": "Obsidian Built-in Callouts.md",
+      "type": "abstract",
+      "title": "Title",
+      "content": "Contents",
+      "lineNumber": 9,
+      "fileModTime": "2025-08-07 15:04:29",
+      "calloutCreatedTime": "2025-08-07 15:04:29",
+      "calloutModifyTime": "2025-08-07 15:04:29",
+      "outlinks": []
+    },
+    {
+      "file": "Obsidian Built-in Callouts.md",
+      "type": "summary",
+      "title": "Title",
+      "content": "Contents",
+      "lineNumber": 15,
+      "fileModTime": "2025-08-07 15:04:29",
+      "calloutCreatedTime": "2025-08-12 10:38:39",
+      "calloutModifyTime": "2025-08-12 10:38:39",
+      "calloutID": "summary-uc8im1",
+      "outlinks": []
+    },
+    {
+      "file": "Obsidian Built-in Callouts.md",
+      "type": "tldr",
+      "title": "Title",
+      "content": "Contents",
+      "lineNumber": 21,
+      "fileModTime": "2025-08-07 15:04:29",
+      "calloutCreatedTime": "2025-08-12 10:38:39",
+      "calloutModifyTime": "2025-08-12 10:38:39",
+      "calloutID": "tldr-1qu612",
+      "outlinks": []
+    },
+    {
+      "file": "Obsidian Built-in Callouts.md",
+      "type": "info",
+      "title": "Title",
+      "content": "Contents",
+      "lineNumber": 27,
+      "fileModTime": "2025-08-07 15:04:29",
+      "calloutCreatedTime": "2025-08-12 10:38:39",
+      "calloutModifyTime": "2025-08-12 10:38:39",
+      "calloutID": "info-luihej",
+      "outlinks": []
+    },
+    {
+      "file": "Obsidian Built-in Callouts.md",
+      "type": "todo",
+      "title": "Title",
+      "content": "Contents",
+      "lineNumber": 33,
+      "fileModTime": "2025-08-07 15:04:29",
+      "calloutCreatedTime": "2025-08-12 10:38:39",
+      "calloutModifyTime": "2025-08-12 10:38:39",
+      "calloutID": "todo-h3dzun",
+      "outlinks": []
+    },
+    {
+      "file": "Obsidian Built-in Callouts.md",
+      "type": "tip",
+      "title": "Title",
+      "content": "Contents",
+      "lineNumber": 38,
+      "fileModTime": "2025-08-07 15:04:29",
+      "calloutCreatedTime": "2025-08-07 15:04:29",
+      "calloutModifyTime": "2025-08-07 15:04:29",
+      "outlinks": []
+    },
+    {
+      "file": "Obsidian Built-in Callouts.md",
+      "type": "hint",
+      "title": "Title",
+      "content": "Contents",
+      "lineNumber": 43,
+      "fileModTime": "2025-08-07 15:04:29",
+      "calloutCreatedTime": "2025-08-07 15:04:29",
+      "calloutModifyTime": "2025-08-07 15:04:29",
+      "outlinks": []
+    },
+    {
+      "file": "Obsidian Built-in Callouts.md",
+      "type": "important",
+      "title": "Title",
+      "content": "Contents",
+      "lineNumber": 48,
+      "fileModTime": "2025-08-07 15:04:29",
+      "calloutCreatedTime": "2025-08-07 15:04:29",
+      "calloutModifyTime": "2025-08-07 15:04:29",
+      "outlinks": []
+    },
+    {
+      "file": "Obsidian Built-in Callouts.md",
+      "type": "success",
+      "title": "Title",
+      "content": "Contents",
+      "lineNumber": 53,
+      "fileModTime": "2025-08-07 15:04:29",
+      "calloutCreatedTime": "2025-08-07 15:04:29",
+      "calloutModifyTime": "2025-08-07 15:04:29",
+      "outlinks": []
+    },
+    {
+      "file": "Obsidian Built-in Callouts.md",
+      "type": "check",
+      "title": "Title",
+      "content": "Contents",
+      "lineNumber": 58,
+      "fileModTime": "2025-08-07 15:04:29",
+      "calloutCreatedTime": "2025-08-07 15:04:29",
+      "calloutModifyTime": "2025-08-07 15:04:29",
+      "outlinks": []
+    },
+    {
+      "file": "Obsidian Built-in Callouts.md",
+      "type": "done",
+      "title": "Title",
+      "content": "Contents",
+      "lineNumber": 63,
+      "fileModTime": "2025-08-07 15:04:29",
+      "calloutCreatedTime": "2025-08-07 15:04:29",
+      "calloutModifyTime": "2025-08-07 15:04:29",
+      "outlinks": []
+    },
+    {
+      "file": "Obsidian Built-in Callouts.md",
+      "type": "question",
+      "title": "Title",
+      "content": "Contents",
+      "lineNumber": 68,
+      "fileModTime": "2025-08-07 15:04:29",
+      "calloutCreatedTime": "2025-08-07 15:04:29",
+      "calloutModifyTime": "2025-08-07 15:04:29",
+      "outlinks": []
+    },
+    {
+      "file": "Obsidian Built-in Callouts.md",
+      "type": "help",
+      "title": "Title",
+      "content": "Contents",
+      "lineNumber": 73,
+      "fileModTime": "2025-08-07 15:04:29",
+      "calloutCreatedTime": "2025-08-07 15:04:29",
+      "calloutModifyTime": "2025-08-07 15:04:29",
+      "outlinks": []
+    },
+    {
+      "file": "Obsidian Built-in Callouts.md",
+      "type": "faq",
+      "title": "Title",
+      "content": "Contents",
+      "lineNumber": 78,
+      "fileModTime": "2025-08-07 15:04:29",
+      "calloutCreatedTime": "2025-08-07 15:04:29",
+      "calloutModifyTime": "2025-08-07 15:04:29",
+      "outlinks": []
+    },
+    {
+      "file": "Obsidian Built-in Callouts.md",
+      "type": "warning",
+      "title": "Title",
+      "content": "Contents",
+      "lineNumber": 83,
+      "fileModTime": "2025-08-07 15:04:29",
+      "calloutCreatedTime": "2025-08-07 15:04:29",
+      "calloutModifyTime": "2025-08-07 15:04:29",
+      "outlinks": []
+    },
+    {
+      "file": "Obsidian Built-in Callouts.md",
+      "type": "caution",
+      "title": "Title",
+      "content": "Contents",
+      "lineNumber": 88,
+      "fileModTime": "2025-08-07 15:04:29",
+      "calloutCreatedTime": "2025-08-07 15:04:29",
+      "calloutModifyTime": "2025-08-07 15:04:29",
+      "outlinks": []
+    },
+    {
+      "file": "Obsidian Built-in Callouts.md",
+      "type": "attention",
+      "title": "Title",
+      "content": "Contents",
+      "lineNumber": 93,
+      "fileModTime": "2025-08-07 15:04:29",
+      "calloutCreatedTime": "2025-08-07 15:04:29",
+      "calloutModifyTime": "2025-08-07 15:04:29",
+      "outlinks": []
+    },
+    {
+      "file": "Obsidian Built-in Callouts.md",
+      "type": "failure",
+      "title": "Title",
+      "content": "Contents",
+      "lineNumber": 98,
+      "fileModTime": "2025-08-07 15:04:29",
+      "calloutCreatedTime": "2025-08-07 15:04:29",
+      "calloutModifyTime": "2025-08-07 15:04:29",
+      "outlinks": []
+    },
+    {
+      "file": "Obsidian Built-in Callouts.md",
+      "type": "fail",
+      "title": "Title",
+      "content": "Contents",
+      "lineNumber": 103,
+      "fileModTime": "2025-08-07 15:04:29",
+      "calloutCreatedTime": "2025-08-07 15:04:29",
+      "calloutModifyTime": "2025-08-07 15:04:29",
+      "outlinks": []
+    },
+    {
+      "file": "Obsidian Built-in Callouts.md",
+      "type": "missing",
+      "title": "Title",
+      "content": "Contents",
+      "lineNumber": 108,
+      "fileModTime": "2025-08-07 15:04:29",
+      "calloutCreatedTime": "2025-08-07 15:04:29",
+      "calloutModifyTime": "2025-08-07 15:04:29",
+      "outlinks": []
+    },
+    {
+      "file": "Obsidian Built-in Callouts.md",
+      "type": "danger",
+      "title": "Title",
+      "content": "Contents",
+      "lineNumber": 113,
+      "fileModTime": "2025-08-07 15:04:29",
+      "calloutCreatedTime": "2025-08-07 15:04:29",
+      "calloutModifyTime": "2025-08-07 15:04:29",
+      "outlinks": []
+    },
+    {
+      "file": "Obsidian Built-in Callouts.md",
+      "type": "error",
+      "title": "Title",
+      "content": "Contents",
+      "lineNumber": 118,
+      "fileModTime": "2025-08-07 15:04:29",
+      "calloutCreatedTime": "2025-08-07 15:04:29",
+      "calloutModifyTime": "2025-08-07 15:04:29",
+      "outlinks": []
+    },
+    {
+      "file": "Obsidian Built-in Callouts.md",
+      "type": "bug",
+      "title": "Title",
+      "content": "Contents",
+      "lineNumber": 123,
+      "fileModTime": "2025-08-07 15:04:29",
+      "calloutCreatedTime": "2025-08-07 15:04:29",
+      "calloutModifyTime": "2025-08-07 15:04:29",
+      "outlinks": []
+    },
+    {
+      "file": "Obsidian Built-in Callouts.md",
+      "type": "example",
+      "title": "Title",
+      "content": "Contents",
+      "lineNumber": 128,
+      "fileModTime": "2025-08-07 15:04:29",
+      "calloutCreatedTime": "2025-08-07 15:04:29",
+      "calloutModifyTime": "2025-08-07 15:04:29",
+      "outlinks": []
+    },
+    {
+      "file": "Obsidian Built-in Callouts.md",
+      "type": "quote",
+      "title": "Title",
+      "content": "Contents",
+      "lineNumber": 133,
+      "fileModTime": "2025-08-07 15:04:29",
+      "calloutCreatedTime": "2025-08-07 15:04:29",
+      "calloutModifyTime": "2025-08-07 15:04:29",
+      "outlinks": []
+    },
+    {
+      "file": "Obsidian Built-in Callouts.md",
+      "type": "cite",
+      "title": "Title",
+      "content": "Contents",
+      "lineNumber": 138,
+      "fileModTime": "2025-08-07 15:04:29",
+      "calloutCreatedTime": "2025-08-07 15:04:29",
+      "calloutModifyTime": "2025-08-07 15:04:29",
       "outlinks": []
     },
     {
@@ -417,7 +360,6 @@
       "calloutCreatedTime": "2025-08-12 10:38:39",
       "calloutModifyTime": "2025-08-12 10:38:39",
       "calloutID": "definition-abc123",
-      "inlinks": [],
       "outlinks": []
     },
     {
@@ -430,7 +372,6 @@
       "calloutCreatedTime": "2025-08-12 10:38:39",
       "calloutModifyTime": "2025-08-12 10:38:39",
       "calloutID": "theorem-def456",
-      "inlinks": [],
       "outlinks": []
     },
     {
@@ -443,7 +384,6 @@
       "calloutCreatedTime": "2025-08-12 10:38:39",
       "calloutModifyTime": "2025-08-12 10:38:39",
       "calloutID": "lemma-ghi789",
-      "inlinks": [],
       "outlinks": []
     },
     {
@@ -455,7 +395,6 @@
       "fileModTime": "2025-08-08 23:51:20",
       "calloutCreatedTime": "2025-08-08 23:51:20",
       "calloutModifyTime": "2025-08-08 23:51:20",
-      "inlinks": [],
       "outlinks": []
     },
     {
@@ -468,7 +407,6 @@
       "calloutCreatedTime": "2025-08-12 10:38:39",
       "calloutModifyTime": "2025-08-12 10:38:39",
       "calloutID": "corollary-y6y6gk",
-      "inlinks": [],
       "outlinks": []
     },
     {
@@ -480,7 +418,6 @@
       "fileModTime": "2025-08-08 23:51:20",
       "calloutCreatedTime": "2025-08-08 23:51:20",
       "calloutModifyTime": "2025-08-08 23:51:20",
-      "inlinks": [],
       "outlinks": []
     },
     {
@@ -493,7 +430,6 @@
       "calloutCreatedTime": "2025-08-12 10:38:39",
       "calloutModifyTime": "2025-08-12 10:38:39",
       "calloutID": "conjecture-14sbgi",
-      "inlinks": [],
       "outlinks": []
     },
     {
@@ -505,20 +441,22 @@
       "fileModTime": "2025-08-08 23:51:20",
       "calloutCreatedTime": "2025-08-08 23:51:20",
       "calloutModifyTime": "2025-08-08 23:51:20",
-      "inlinks": [],
       "outlinks": []
     }
   ],
   "fileModTimes": {
-    "Obsidian Built-in Callouts.md": "2025-08-07 15:04:29",
     "writing-ide-server/README.md": "2025-08-11 19:41:48",
     "Test.md": "2025-08-12 23:48:13",
     "Tasks.md": "2025-08-12 21:44:19",
     "Plugin Maintenance Guide.md": "2025-08-12 10:52:57",
+    "Obsidian Built-in Callouts.md": "2025-08-07 15:04:29",
     "Custom Callouts.md": "2025-08-08 23:51:20",
     "CLAUDE.md": "2025-08-12 16:06:00"
   },
   "calloutCreationTimes": {
+    "Test.md:a": "2025-08-12 23:26:18",
+    "Test.md:b": "2025-08-12 23:26:18",
+    "Test.md:c": "2025-08-12 23:48:24",
     "Obsidian Built-in Callouts.md:4:note:Title": "2025-08-07 15:04:29",
     "Obsidian Built-in Callouts.md:9:abstract:Title": "2025-08-07 15:04:29",
     "Obsidian Built-in Callouts.md:summary-uc8im1": "2025-08-12 10:38:39",
@@ -546,9 +484,6 @@
     "Obsidian Built-in Callouts.md:128:example:Title": "2025-08-07 15:04:29",
     "Obsidian Built-in Callouts.md:133:quote:Title": "2025-08-07 15:04:29",
     "Obsidian Built-in Callouts.md:138:cite:Title": "2025-08-07 15:04:29",
-    "Test.md:a": "2025-08-12 23:26:18",
-    "Test.md:b": "2025-08-12 23:26:18",
-    "Test.md:c": "2025-08-12 23:48:24",
     "Custom Callouts.md:definition-abc123": "2025-08-12 10:38:39",
     "Custom Callouts.md:theorem-def456": "2025-08-12 10:38:39",
     "Custom Callouts.md:lemma-ghi789": "2025-08-12 10:38:39",

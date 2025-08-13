@@ -208,6 +208,7 @@
       "icon": "pencil"
     }
   },
+  "disabledRelationships": [],
   "cacheFileName": "callouts.json",
   "searchInHeaders": true,
   "showCurrentFileInSearch": true,

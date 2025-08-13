@@ -1342,11 +1342,11 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
       const bidirectionalCallouts = [];
       relatedCallouts.forEach((callout) => {
         var _a2, _b2;
-        const isInlink = (_a2 = selectedCallout.inlinks) == null ? void 0 : _a2.some(
+        const isOutlink = (_a2 = selectedCallout.outlinks) == null ? void 0 : _a2.some(
           ([file, id]) => file === callout.file && id === callout.calloutID
         );
-        const isOutlink = (_b2 = selectedCallout.outlinks) == null ? void 0 : _b2.some(
-          ([file, id]) => file === callout.file && id === callout.calloutID
+        const isInlink = (_b2 = callout.outlinks) == null ? void 0 : _b2.some(
+          ([file, id]) => file === selectedCallout.file && id === selectedCallout.calloutID
         );
         if (isInlink && isOutlink) {
           bidirectionalCallouts.push(callout);
@@ -1400,7 +1400,6 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
       });
       if (bidirectionalCallouts.length > 0) {
         if (bidirectionalCallouts.length === 1) {
-          canvasData.nodes[0].y = -150;
           const callout = bidirectionalCallouts[0];
           const calloutId = `${callout.file}#^${callout.calloutID}`;
           canvasData.nodes.push({
@@ -1408,8 +1407,9 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
             type: "text",
             text: `![[${callout.file}#^${callout.calloutID}]]`,
             x: 0,
-            y: 150,
-            // 双向节点在下
+            // 与主节点水平对齐
+            y: 300,
+            // 放在下方
             width: 350,
             height: 150,
             color: this.getCanvasColorForCallout(callout.type)
@@ -1417,29 +1417,29 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
           canvasData.edges.push({
             id: `edge-main-to-${calloutId}`,
             fromNode: mainCalloutId,
-            fromSide: "bottom",
+            fromSide: "right",
             toNode: calloutId,
-            toSide: "top"
+            toSide: "right"
           });
           canvasData.edges.push({
             id: `edge-${calloutId}-to-main`,
             fromNode: calloutId,
-            fromSide: "top",
+            fromSide: "left",
             toNode: mainCalloutId,
-            toSide: "bottom"
+            toSide: "left"
           });
         } else {
-          const totalHeight = bidirectionalCallouts.length * 200;
-          const startY = -totalHeight / 2 + 100;
           bidirectionalCallouts.forEach((callout, index) => {
-            const y = startY + index * 200;
+            const x = (index - (bidirectionalCallouts.length - 1) / 2) * 400;
             const calloutId = `${callout.file}#^${callout.calloutID}`;
             canvasData.nodes.push({
               id: calloutId,
               type: "text",
               text: `![[${callout.file}#^${callout.calloutID}]]`,
-              x: 0,
-              y,
+              x,
+              // 水平分布
+              y: 300,
+              // 都放在下方
               width: 350,
               height: 150,
               color: this.getCanvasColorForCallout(callout.type)
@@ -1447,16 +1447,16 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
             canvasData.edges.push({
               id: `edge-main-to-${calloutId}`,
               fromNode: mainCalloutId,
-              fromSide: y < 0 ? "top" : "bottom",
+              fromSide: "right",
               toNode: calloutId,
-              toSide: y < 0 ? "bottom" : "top"
+              toSide: "right"
             });
             canvasData.edges.push({
               id: `edge-${calloutId}-to-main`,
               fromNode: calloutId,
-              fromSide: y < 0 ? "bottom" : "top",
+              fromSide: "left",
               toNode: mainCalloutId,
-              toSide: y < 0 ? "top" : "bottom"
+              toSide: "left"
             });
           });
         }
@@ -1496,16 +1496,6 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
     });
     const relatedCallouts = [];
     const addedCalloutKeys = /* @__PURE__ */ new Set();
-    if (selectedCallout.inlinks) {
-      selectedCallout.inlinks.forEach(([filename, calloutID]) => {
-        const key = `${filename}:${calloutID}`;
-        const callout = calloutMap.get(key);
-        if (callout && !addedCalloutKeys.has(key)) {
-          relatedCallouts.push(callout);
-          addedCalloutKeys.add(key);
-        }
-      });
-    }
     if (selectedCallout.outlinks) {
       selectedCallout.outlinks.forEach(([filename, calloutID]) => {
         const key = `${filename}:${calloutID}`;
@@ -1516,6 +1506,20 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
         }
       });
     }
+    allCallouts.forEach((callout) => {
+      if (callout.calloutID && callout.outlinks) {
+        const hasLinkToSelected = callout.outlinks.some(
+          ([filename, calloutID]) => filename === selectedCallout.file && calloutID === selectedCallout.calloutID
+        );
+        if (hasLinkToSelected) {
+          const key = `${callout.file}:${callout.calloutID}`;
+          if (!addedCalloutKeys.has(key)) {
+            relatedCallouts.push(callout);
+            addedCalloutKeys.add(key);
+          }
+        }
+      }
+    });
     return relatedCallouts;
   }
   /**
@@ -1560,13 +1564,26 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
     return "1";
   }
   /**
-   * 分析canvas文件中的链接关系，更新callout的inlinks和outlinks
+   * 从canvas文件名中提取对应的callout信息
+   * 格式: callout-{filename}-{calloutID}.canvas
+   * 例如: callout-Test-a.canvas -> { filename: "Test.md", calloutID: "a" }
+   */
+  extractCalloutFromCanvasName(canvasFileName) {
+    const match = canvasFileName.match(/^callout-(.+)-([^-]+)\.canvas$/);
+    if (match) {
+      const [, filename, calloutID] = match;
+      const fullFilename = filename.endsWith(".md") ? filename : `${filename}.md`;
+      return { filename: fullFilename, calloutID };
+    }
+    return null;
+  }
+  /**
+   * 分析canvas文件中的链接关系，只更新outlinks（移除inlinks冗余）
    */
   async analyzeCanvasLinks(callouts) {
     try {
       const updatedCallouts = callouts.map((callout) => ({
         ...callout,
-        inlinks: [],
         outlinks: []
       }));
       const calloutMap = /* @__PURE__ */ new Map();
@@ -1588,6 +1605,13 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
         try {
           const canvasContent = await this.app.vault.read(canvasFile);
           const canvasData = JSON.parse(canvasContent);
+          const targetCallout = this.extractCalloutFromCanvasName(canvasFile.name);
+          if (!targetCallout) {
+            console.log(`Skipping canvas ${canvasFile.name}: invalid filename format`);
+            continue;
+          }
+          const expectedFromNodeId = `${targetCallout.filename}#^${targetCallout.calloutID}`;
+          console.log(`Processing canvas ${canvasFile.name}, target fromNode: ${expectedFromNodeId}`);
           if (canvasData.edges && Array.isArray(canvasData.edges) && canvasData.nodes && Array.isArray(canvasData.nodes)) {
             const nodeIdToCallout = /* @__PURE__ */ new Map();
             canvasData.nodes.forEach((node) => {
@@ -1607,8 +1631,9 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
                 }
               }
             });
-            console.log(`Processing ${canvasData.edges.length} edges in canvas ${canvasFile.path}`);
-            canvasData.edges.forEach((edge, edgeIndex) => {
+            const targetEdges = canvasData.edges.filter((edge) => edge.fromNode === expectedFromNodeId);
+            console.log(`Processing ${targetEdges.length} edges from ${expectedFromNodeId} in canvas ${canvasFile.path}`);
+            targetEdges.forEach((edge, edgeIndex) => {
               const fromNodeId = edge.fromNode;
               const toNodeId = edge.toNode;
               console.log(`Edge ${edgeIndex + 1}: ${fromNodeId} -> ${toNodeId}`);
@@ -1619,10 +1644,8 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
                 const [toFile, toCalloutID] = toCalloutInfo;
                 console.log(`  Mapping: [${fromFile}:${fromCalloutID}] -> [${toFile}:${toCalloutID}]`);
                 const fromKey = `${fromFile}:${fromCalloutID}`;
-                const toKey = `${toFile}:${toCalloutID}`;
                 const fromCallout = calloutMap.get(fromKey);
-                const toCallout = calloutMap.get(toKey);
-                if (fromCallout && toCallout) {
+                if (fromCallout) {
                   fromCallout.outlinks = fromCallout.outlinks || [];
                   const outLinkExists = fromCallout.outlinks.some(([file, id]) => file === toFile && id === toCalloutID);
                   if (!outLinkExists) {
@@ -1631,16 +1654,8 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
                   } else {
                     console.log(`  Outlink already exists: ${fromFile}:${fromCalloutID} -> ${toFile}:${toCalloutID}`);
                   }
-                  toCallout.inlinks = toCallout.inlinks || [];
-                  const inLinkExists = toCallout.inlinks.some(([file, id]) => file === fromFile && id === fromCalloutID);
-                  if (!inLinkExists) {
-                    toCallout.inlinks.push([fromFile, fromCalloutID]);
-                    console.log(`  Added inlink: ${toFile}:${toCalloutID} <- ${fromFile}:${fromCalloutID}`);
-                  } else {
-                    console.log(`  Inlink already exists: ${toFile}:${toCalloutID} <- ${fromFile}:${fromCalloutID}`);
-                  }
                 } else {
-                  console.log(`  Could not find callouts in map: from=${!!fromCallout}, to=${!!toCallout}`);
+                  console.log(`  Could not find fromCallout in map: ${fromKey}`);
                 }
               } else {
                 console.log(`  Could not resolve node IDs: from=${!!fromCalloutInfo}, to=${!!toCalloutInfo}`);
@@ -1653,14 +1668,9 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
       }
       console.log("Final link analysis results:");
       updatedCallouts.forEach((callout) => {
-        if (callout.inlinks && callout.inlinks.length > 0 || callout.outlinks && callout.outlinks.length > 0) {
+        if (callout.outlinks && callout.outlinks.length > 0) {
           console.log(`${callout.file}#^${callout.calloutID}:`);
-          if (callout.inlinks && callout.inlinks.length > 0) {
-            console.log(`  inlinks: ${callout.inlinks.map(([f, id]) => `${f}#^${id}`).join(", ")}`);
-          }
-          if (callout.outlinks && callout.outlinks.length > 0) {
-            console.log(`  outlinks: ${callout.outlinks.map(([f, id]) => `${f}#^${id}`).join(", ")}`);
-          }
+          console.log(`  outlinks: ${callout.outlinks.map(([f, id]) => `${f}#^${id}`).join(", ")}`);
         }
       });
       return updatedCallouts;

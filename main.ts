@@ -17,6 +17,7 @@ interface CalloutCache {
     calloutCreationTimes: Record<string, string>; // callout signature -> creation time (readable format)
 }
 
+
 interface CalloutOrganizerSettings {
     excludedFolders: string[];
     groupByType: boolean;
@@ -103,7 +104,6 @@ interface CalloutItem {
     fileModTime?: string; // Human-readable file modification time (YYYY-MM-DD HH:mm:ss)
     calloutCreatedTime?: string; // Human-readable time when callout was first created (YYYY-MM-DD HH:mm:ss)
     calloutModifyTime?: string;  // Human-readable time when callout was last modified (YYYY-MM-DD HH:mm:ss)
-    inlinks?: [string, string][]; // Array of [filename, calloutID] pairs that link TO this callout
     outlinks?: [string, string][]; // Array of [filename, calloutID] pairs that this callout links TO
 }
 
@@ -1322,6 +1322,7 @@ export default class CalloutOrganizerPlugin extends Plugin {
 
 
 
+
         this.addSettingTab(new CalloutOrganizerSettingTab(this.app, this));
         
         // Auto-detect and populate callout colors on startup
@@ -1755,11 +1756,14 @@ export default class CalloutOrganizerPlugin extends Plugin {
             const bidirectionalCallouts: CalloutItem[] = [];
             
             relatedCallouts.forEach(callout => {
-                const isInlink = selectedCallout.inlinks?.some(([file, id]) => 
-                    file === callout.file && id === callout.calloutID
-                );
+                // 检查是否是outlink（selectedCallout指向这个callout）
                 const isOutlink = selectedCallout.outlinks?.some(([file, id]) => 
                     file === callout.file && id === callout.calloutID
+                );
+                
+                // 检查是否是inlink（这个callout指向selectedCallout）
+                const isInlink = callout.outlinks?.some(([file, id]) => 
+                    file === selectedCallout.file && id === selectedCallout.calloutID
                 );
                 
                 if (isInlink && isOutlink) {
@@ -1827,9 +1831,7 @@ export default class CalloutOrganizerPlugin extends Plugin {
             if (bidirectionalCallouts.length > 0) {
                 // 调整主节点位置以便为双向节点留出空间
                 if (bidirectionalCallouts.length === 1) {
-                    // 一个双向节点：主节点在上，双向节点在下
-                    canvasData.nodes[0].y = -150; // 主节点上移
-                    
+                    // 一个双向节点：放在下方，便于圆形连接
                     const callout = bidirectionalCallouts[0];
                     const calloutId = `${callout.file}#^${callout.calloutID}`;
                     
@@ -1837,64 +1839,61 @@ export default class CalloutOrganizerPlugin extends Plugin {
                         id: calloutId,
                         type: "text",
                         text: `![[${callout.file}#^${callout.calloutID}]]`,
-                        x: 0,
-                        y: 150, // 双向节点在下
+                        x: 0,   // 与主节点水平对齐
+                        y: 300, // 放在下方
                         width: 350,
                         height: 150,
                         color: this.getCanvasColorForCallout(callout.type)
                     });
                     
-                    // 创建双向连接
+                    // 创建圆形双向连接：A右侧→B右侧，B左侧→A左侧
                     (canvasData.edges as any[]).push({
                         id: `edge-main-to-${calloutId}`,
                         fromNode: mainCalloutId,
-                        fromSide: "bottom",
+                        fromSide: "right",
                         toNode: calloutId,
-                        toSide: "top"
+                        toSide: "right"
                     });
                     
                     (canvasData.edges as any[]).push({
                         id: `edge-${calloutId}-to-main`,
                         fromNode: calloutId,
-                        fromSide: "top",
+                        fromSide: "left",
                         toNode: mainCalloutId,
-                        toSide: "bottom"
+                        toSide: "left"
                     });
                 } else {
-                    // 多个双向节点：垂直排列
-                    const totalHeight = bidirectionalCallouts.length * 200;
-                    const startY = -totalHeight / 2 + 100;
-                    
+                    // 多个双向节点：垂直排列在下方，方便圆形连接
                     bidirectionalCallouts.forEach((callout, index) => {
-                        const y = startY + index * 200;
+                        const x = (index - (bidirectionalCallouts.length - 1) / 2) * 400; // 水平分布
                         const calloutId = `${callout.file}#^${callout.calloutID}`;
                         
                         canvasData.nodes.push({
                             id: calloutId,
                             type: "text",
                             text: `![[${callout.file}#^${callout.calloutID}]]`,
-                            x: 0,
-                            y: y,
+                            x: x, // 水平分布
+                            y: 300, // 都放在下方
                             width: 350,
                             height: 150,
                             color: this.getCanvasColorForCallout(callout.type)
                         });
                         
-                        // 为每个双向节点创建双向连接
+                        // 为每个双向节点创建圆形双向连接
                         (canvasData.edges as any[]).push({
                             id: `edge-main-to-${calloutId}`,
                             fromNode: mainCalloutId,
-                            fromSide: y < 0 ? "top" : "bottom",
+                            fromSide: "right",
                             toNode: calloutId,
-                            toSide: y < 0 ? "bottom" : "top"
+                            toSide: "right"
                         });
                         
                         (canvasData.edges as any[]).push({
                             id: `edge-${calloutId}-to-main`,
                             fromNode: calloutId,
-                            fromSide: y < 0 ? "bottom" : "top",
+                            fromSide: "left",
                             toNode: mainCalloutId,
-                            toSide: y < 0 ? "top" : "bottom"
+                            toSide: "left"
                         });
                     });
                 }
@@ -1947,19 +1946,7 @@ export default class CalloutOrganizerPlugin extends Plugin {
         const relatedCallouts: CalloutItem[] = [];
         const addedCalloutKeys = new Set<string>();
         
-        // 添加inlinks callouts
-        if (selectedCallout.inlinks) {
-            selectedCallout.inlinks.forEach(([filename, calloutID]) => {
-                const key = `${filename}:${calloutID}`;
-                const callout = calloutMap.get(key);
-                if (callout && !addedCalloutKeys.has(key)) {
-                    relatedCallouts.push(callout);
-                    addedCalloutKeys.add(key);
-                }
-            });
-        }
-        
-        // 添加outlinks callouts
+        // 添加outlinks callouts（直接连接）
         if (selectedCallout.outlinks) {
             selectedCallout.outlinks.forEach(([filename, calloutID]) => {
                 const key = `${filename}:${calloutID}`;
@@ -1970,6 +1957,23 @@ export default class CalloutOrganizerPlugin extends Plugin {
                 }
             });
         }
+        
+        // 查找inlinks callouts（那些outlinks中包含selectedCallout的callouts）
+        allCallouts.forEach(callout => {
+            if (callout.calloutID && callout.outlinks) {
+                const hasLinkToSelected = callout.outlinks.some(([filename, calloutID]) => 
+                    filename === selectedCallout.file && calloutID === selectedCallout.calloutID
+                );
+                
+                if (hasLinkToSelected) {
+                    const key = `${callout.file}:${callout.calloutID}`;
+                    if (!addedCalloutKeys.has(key)) {
+                        relatedCallouts.push(callout);
+                        addedCalloutKeys.add(key);
+                    }
+                }
+            }
+        });
         
         return relatedCallouts;
     }
@@ -2011,15 +2015,31 @@ export default class CalloutOrganizerPlugin extends Plugin {
         return "1"; // 默认颜色
     }
 
+
     /**
-     * 分析canvas文件中的链接关系，更新callout的inlinks和outlinks
+     * 从canvas文件名中提取对应的callout信息
+     * 格式: callout-{filename}-{calloutID}.canvas
+     * 例如: callout-Test-a.canvas -> { filename: "Test.md", calloutID: "a" }
+     */
+    private extractCalloutFromCanvasName(canvasFileName: string): { filename: string; calloutID: string } | null {
+        const match = canvasFileName.match(/^callout-(.+)-([^-]+)\.canvas$/);
+        if (match) {
+            const [, filename, calloutID] = match;
+            // 如果文件名不以.md结尾，自动添加
+            const fullFilename = filename.endsWith('.md') ? filename : `${filename}.md`;
+            return { filename: fullFilename, calloutID };
+        }
+        return null;
+    }
+
+    /**
+     * 分析canvas文件中的链接关系，只更新outlinks（移除inlinks冗余）
      */
     private async analyzeCanvasLinks(callouts: CalloutItem[]): Promise<CalloutItem[]> {
         try {
-            // 初始化所有callout的links
+            // 初始化所有callout的outlinks（移除inlinks冗余）
             const updatedCallouts = callouts.map(callout => ({
                 ...callout,
-                inlinks: [],
                 outlinks: []
             }));
 
@@ -2049,6 +2069,16 @@ export default class CalloutOrganizerPlugin extends Plugin {
                     const canvasContent = await this.app.vault.read(canvasFile);
                     const canvasData = JSON.parse(canvasContent);
                     
+                    // 从canvas文件名中提取对应的callout信息
+                    const targetCallout = this.extractCalloutFromCanvasName(canvasFile.name);
+                    if (!targetCallout) {
+                        console.log(`Skipping canvas ${canvasFile.name}: invalid filename format`);
+                        continue;
+                    }
+                    
+                    const expectedFromNodeId = `${targetCallout.filename}#^${targetCallout.calloutID}`;
+                    console.log(`Processing canvas ${canvasFile.name}, target fromNode: ${expectedFromNodeId}`);
+                    
                     if (canvasData.edges && Array.isArray(canvasData.edges) && canvasData.nodes && Array.isArray(canvasData.nodes)) {
                         // 创建节点ID到[filename, calloutID]的映射
                         const nodeIdToCallout = new Map<string, [string, string]>();
@@ -2073,9 +2103,11 @@ export default class CalloutOrganizerPlugin extends Plugin {
                             }
                         });
                         
-                        // 分析边（连接）
-                        console.log(`Processing ${canvasData.edges.length} edges in canvas ${canvasFile.path}`);
-                        canvasData.edges.forEach((edge: any, edgeIndex: number) => {
+                        // 分析边（连接）- 只处理以expectedFromNodeId为起点的edge
+                        const targetEdges = canvasData.edges.filter((edge: any) => edge.fromNode === expectedFromNodeId);
+                        console.log(`Processing ${targetEdges.length} edges from ${expectedFromNodeId} in canvas ${canvasFile.path}`);
+                        
+                        targetEdges.forEach((edge: any, edgeIndex: number) => {
                             const fromNodeId = edge.fromNode;
                             const toNodeId = edge.toNode;
                             
@@ -2091,13 +2123,10 @@ export default class CalloutOrganizerPlugin extends Plugin {
                                 console.log(`  Mapping: [${fromFile}:${fromCalloutID}] -> [${toFile}:${toCalloutID}]`);
                                 
                                 const fromKey = `${fromFile}:${fromCalloutID}`;
-                                const toKey = `${toFile}:${toCalloutID}`;
-                                
                                 const fromCallout = calloutMap.get(fromKey);
-                                const toCallout = calloutMap.get(toKey);
                                 
-                                if (fromCallout && toCallout) {
-                                    // A -> B: A的outlinks包含[toFile, toCalloutID], B的inlinks包含[fromFile, fromCalloutID]
+                                if (fromCallout) {
+                                    // 只创建outlinks，移除inlinks冗余
                                     fromCallout.outlinks = fromCallout.outlinks || [];
                                     const outLinkExists = fromCallout.outlinks.some(([file, id]) => file === toFile && id === toCalloutID);
                                     if (!outLinkExists) {
@@ -2106,17 +2135,8 @@ export default class CalloutOrganizerPlugin extends Plugin {
                                     } else {
                                         console.log(`  Outlink already exists: ${fromFile}:${fromCalloutID} -> ${toFile}:${toCalloutID}`);
                                     }
-                                    
-                                    toCallout.inlinks = toCallout.inlinks || [];
-                                    const inLinkExists = toCallout.inlinks.some(([file, id]) => file === fromFile && id === fromCalloutID);
-                                    if (!inLinkExists) {
-                                        toCallout.inlinks.push([fromFile, fromCalloutID]);
-                                        console.log(`  Added inlink: ${toFile}:${toCalloutID} <- ${fromFile}:${fromCalloutID}`);
-                                    } else {
-                                        console.log(`  Inlink already exists: ${toFile}:${toCalloutID} <- ${fromFile}:${fromCalloutID}`);
-                                    }
                                 } else {
-                                    console.log(`  Could not find callouts in map: from=${!!fromCallout}, to=${!!toCallout}`);
+                                    console.log(`  Could not find fromCallout in map: ${fromKey}`);
                                 }
                             } else {
                                 console.log(`  Could not resolve node IDs: from=${!!fromCalloutInfo}, to=${!!toCalloutInfo}`);
@@ -2128,17 +2148,12 @@ export default class CalloutOrganizerPlugin extends Plugin {
                 }
             }
 
-            // 显示最终的链接统计
+            // 显示最终的链接统计（只显示outlinks）
             console.log('Final link analysis results:');
             updatedCallouts.forEach(callout => {
-                if ((callout.inlinks && callout.inlinks.length > 0) || (callout.outlinks && callout.outlinks.length > 0)) {
+                if (callout.outlinks && callout.outlinks.length > 0) {
                     console.log(`${callout.file}#^${callout.calloutID}:`);
-                    if (callout.inlinks && callout.inlinks.length > 0) {
-                        console.log(`  inlinks: ${(callout.inlinks as [string, string][]).map(([f, id]) => `${f}#^${id}`).join(', ')}`);
-                    }
-                    if (callout.outlinks && callout.outlinks.length > 0) {
-                        console.log(`  outlinks: ${(callout.outlinks as [string, string][]).map(([f, id]) => `${f}#^${id}`).join(', ')}`);
-                    }
+                    console.log(`  outlinks: ${(callout.outlinks as [string, string][]).map(([f, id]) => `${f}#^${id}`).join(', ')}`);
                 }
             });
 
@@ -3607,3 +3622,4 @@ class CalloutSelectorModal extends Modal {
         contentEl.empty();
     }
 }
+
