@@ -42,6 +42,7 @@ var DEFAULT_SETTINGS = {
   enableFileCache: true,
   // Canvas settings
   canvasStorageFolder: "Callout Connections",
+  graphConnectionDepth: 2,
   // Display options - show all by default
   showFilenames: true,
   showH1Headers: true,
@@ -1335,132 +1336,108 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
         ],
         edges: []
       };
-      const relatedCallouts = await this.getRelatedCallouts(selectedCallout);
+      const relatedData = await this.getRelatedCallouts(selectedCallout);
+      const relatedCallouts = relatedData.callouts;
+      const allConnections = relatedData.connections;
       const mainCalloutId = `${selectedCallout.file}#^${selectedCallout.calloutID}`;
-      const inlinksCallouts = [];
-      const outlinksCallouts = [];
-      const bidirectionalCallouts = [];
+      const getCalloutKey = (callout) => `${callout.file}:${callout.calloutID}`;
+      const mainCalloutKey = getCalloutKey(selectedCallout);
+      const layoutData = /* @__PURE__ */ new Map();
+      const calculateLevel = (calloutKey, visited = /* @__PURE__ */ new Set()) => {
+        if (calloutKey === mainCalloutKey)
+          return 0;
+        if (visited.has(calloutKey))
+          return Infinity;
+        visited.add(calloutKey);
+        let minLevel = Infinity;
+        for (const [fromKey, toKeys] of allConnections) {
+          if (toKeys.has(calloutKey)) {
+            const fromLevel = calculateLevel(fromKey, new Set(visited));
+            minLevel = Math.min(minLevel, fromLevel + 1);
+          }
+          if (fromKey === calloutKey) {
+            for (const toKey of toKeys) {
+              if (toKey === mainCalloutKey) {
+                minLevel = Math.min(minLevel, 1);
+              }
+            }
+          }
+        }
+        return minLevel;
+      };
+      const calloutsByLevel = /* @__PURE__ */ new Map();
       relatedCallouts.forEach((callout) => {
-        var _a2, _b2;
-        const isOutlink = (_a2 = selectedCallout.outlinks) == null ? void 0 : _a2.some(
-          ([file, id]) => file === callout.file && id === callout.calloutID
-        );
-        const isInlink = (_b2 = callout.outlinks) == null ? void 0 : _b2.some(
-          ([file, id]) => file === selectedCallout.file && id === selectedCallout.calloutID
-        );
-        if (isInlink && isOutlink) {
-          bidirectionalCallouts.push(callout);
-        } else if (isInlink) {
-          inlinksCallouts.push(callout);
-        } else if (isOutlink) {
-          outlinksCallouts.push(callout);
+        const calloutKey = getCalloutKey(callout);
+        const level = calculateLevel(calloutKey);
+        if (!calloutsByLevel.has(level)) {
+          calloutsByLevel.set(level, []);
         }
+        calloutsByLevel.get(level).push(callout);
       });
-      inlinksCallouts.forEach((callout, index) => {
-        const y = (index - (inlinksCallouts.length - 1) / 2) * 200;
+      const nodeSpacing = 250;
+      const levelSpacing = 500;
+      calloutsByLevel.forEach((callouts, level) => {
+        callouts.forEach((callout, index) => {
+          const calloutKey = getCalloutKey(callout);
+          const totalAtLevel = callouts.length;
+          let x;
+          if (level === 1) {
+            x = (index - (totalAtLevel - 1) / 2) * levelSpacing;
+          } else {
+            const angle = index / totalAtLevel * 2 * Math.PI;
+            x = Math.cos(angle) * level * levelSpacing;
+          }
+          let y;
+          if (level === 1) {
+            y = (index - (totalAtLevel - 1) / 2) * nodeSpacing;
+          } else {
+            const angle = index / totalAtLevel * 2 * Math.PI;
+            y = Math.sin(angle) * level * levelSpacing;
+          }
+          layoutData.set(calloutKey, {
+            callout,
+            x,
+            y,
+            level
+          });
+        });
+      });
+      layoutData.forEach(({ callout, x, y, level }) => {
         const calloutId = `${callout.file}#^${callout.calloutID}`;
+        const nodeWidth = Math.max(300, 400 - level * 25);
+        const nodeHeight = Math.max(120, 200 - level * 20);
         canvasData.nodes.push({
           id: calloutId,
           type: "text",
           text: `![[${callout.file}#^${callout.calloutID}]]`,
-          x: -600,
-          y,
-          width: 350,
-          height: 150,
+          x: Math.round(x),
+          y: Math.round(y),
+          width: nodeWidth,
+          height: nodeHeight,
           color: this.getCanvasColorForCallout(callout.type)
         });
-        canvasData.edges.push({
-          id: `edge-${calloutId}-to-main`,
-          fromNode: calloutId,
-          fromSide: "right",
-          toNode: mainCalloutId,
-          toSide: "left"
-        });
       });
-      outlinksCallouts.forEach((callout, index) => {
-        const y = (index - (outlinksCallouts.length - 1) / 2) * 200;
-        const calloutId = `${callout.file}#^${callout.calloutID}`;
-        canvasData.nodes.push({
-          id: calloutId,
-          type: "text",
-          text: `![[${callout.file}#^${callout.calloutID}]]`,
-          x: 600,
-          y,
-          width: 350,
-          height: 150,
-          color: this.getCanvasColorForCallout(callout.type)
-        });
-        canvasData.edges.push({
-          id: `edge-main-to-${calloutId}`,
-          fromNode: mainCalloutId,
-          fromSide: "right",
-          toNode: calloutId,
-          toSide: "left"
-        });
-      });
-      if (bidirectionalCallouts.length > 0) {
-        if (bidirectionalCallouts.length === 1) {
-          const callout = bidirectionalCallouts[0];
-          const calloutId = `${callout.file}#^${callout.calloutID}`;
-          canvasData.nodes.push({
-            id: calloutId,
-            type: "text",
-            text: `![[${callout.file}#^${callout.calloutID}]]`,
-            x: 0,
-            // 与主节点水平对齐
-            y: 300,
-            // 放在下方
-            width: 350,
-            height: 150,
-            color: this.getCanvasColorForCallout(callout.type)
-          });
-          canvasData.edges.push({
-            id: `edge-main-to-${calloutId}`,
-            fromNode: mainCalloutId,
-            fromSide: "right",
-            toNode: calloutId,
-            toSide: "right"
-          });
-          canvasData.edges.push({
-            id: `edge-${calloutId}-to-main`,
-            fromNode: calloutId,
-            fromSide: "left",
-            toNode: mainCalloutId,
-            toSide: "left"
-          });
-        } else {
-          bidirectionalCallouts.forEach((callout, index) => {
-            const x = (index - (bidirectionalCallouts.length - 1) / 2) * 400;
-            const calloutId = `${callout.file}#^${callout.calloutID}`;
-            canvasData.nodes.push({
-              id: calloutId,
-              type: "text",
-              text: `![[${callout.file}#^${callout.calloutID}]]`,
-              x,
-              // 水平分布
-              y: 300,
-              // 都放在下方
-              width: 350,
-              height: 150,
-              color: this.getCanvasColorForCallout(callout.type)
-            });
+      let edgeId = 0;
+      allConnections.forEach((toKeys, fromKey) => {
+        toKeys.forEach((toKey) => {
+          const fromCallout = relatedCallouts.find((c) => getCalloutKey(c) === fromKey) || (fromKey === mainCalloutKey ? selectedCallout : null);
+          const toCallout = relatedCallouts.find((c) => getCalloutKey(c) === toKey) || (toKey === mainCalloutKey ? selectedCallout : null);
+          if (fromCallout && toCallout) {
+            const fromId = `${fromCallout.file}#^${fromCallout.calloutID}`;
+            const toId = `${toCallout.file}#^${toCallout.calloutID}`;
+            const reverseEdgeExists = Array.from(allConnections.get(toKey) || []).includes(fromKey);
             canvasData.edges.push({
-              id: `edge-main-to-${calloutId}`,
-              fromNode: mainCalloutId,
+              id: `edge-${++edgeId}`,
+              fromNode: fromId,
               fromSide: "right",
-              toNode: calloutId,
-              toSide: "right"
+              toNode: toId,
+              toSide: "left",
+              // 双向连接时添加特殊标识
+              label: reverseEdgeExists ? "\u2194" : void 0
             });
-            canvasData.edges.push({
-              id: `edge-${calloutId}-to-main`,
-              fromNode: calloutId,
-              fromSide: "left",
-              toNode: mainCalloutId,
-              toSide: "left"
-            });
-          });
-        }
-      }
+          }
+        });
+      });
       try {
         let canvasFile = this.app.vault.getAbstractFileByPath(canvasPath);
         if (canvasFile) {
@@ -1496,31 +1473,53 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
     });
     const relatedCallouts = [];
     const addedCalloutKeys = /* @__PURE__ */ new Set();
-    if (selectedCallout.outlinks) {
-      selectedCallout.outlinks.forEach(([filename, calloutID]) => {
-        const key = `${filename}:${calloutID}`;
-        const callout = calloutMap.get(key);
-        if (callout && !addedCalloutKeys.has(key)) {
-          relatedCallouts.push(callout);
-          addedCalloutKeys.add(key);
-        }
-      });
-    }
-    allCallouts.forEach((callout) => {
-      if (callout.calloutID && callout.outlinks) {
-        const hasLinkToSelected = callout.outlinks.some(
-          ([filename, calloutID]) => filename === selectedCallout.file && calloutID === selectedCallout.calloutID
-        );
-        if (hasLinkToSelected) {
-          const key = `${callout.file}:${callout.calloutID}`;
-          if (!addedCalloutKeys.has(key)) {
-            relatedCallouts.push(callout);
-            addedCalloutKeys.add(key);
+    const connections = /* @__PURE__ */ new Map();
+    const getCalloutKey = (callout) => `${callout.file}:${callout.calloutID}`;
+    const discoverAtDepth = (callout, currentDepth, maxDepth, visited = /* @__PURE__ */ new Set()) => {
+      const calloutKey = getCalloutKey(callout);
+      if (visited.has(calloutKey)) {
+        return;
+      }
+      const pathVisited = new Set(visited);
+      pathVisited.add(calloutKey);
+      if (currentDepth > 0 && !addedCalloutKeys.has(calloutKey)) {
+        relatedCallouts.push(callout);
+        addedCalloutKeys.add(calloutKey);
+      }
+      if (currentDepth >= maxDepth) {
+        return;
+      }
+      if (callout.outlinks) {
+        callout.outlinks.forEach(([filename, calloutID]) => {
+          const targetKey = `${filename}:${calloutID}`;
+          const targetCallout = calloutMap.get(targetKey);
+          if (targetCallout) {
+            if (!connections.has(calloutKey)) {
+              connections.set(calloutKey, /* @__PURE__ */ new Set());
+            }
+            connections.get(calloutKey).add(targetKey);
+            discoverAtDepth(targetCallout, currentDepth + 1, maxDepth, pathVisited);
+          }
+        });
+      }
+      allCallouts.forEach((inlinkCallout) => {
+        if (inlinkCallout.calloutID && inlinkCallout.outlinks) {
+          const hasLinkToCurrent = inlinkCallout.outlinks.some(
+            ([filename, calloutID]) => filename === callout.file && calloutID === callout.calloutID
+          );
+          if (hasLinkToCurrent) {
+            const inlinkKey = getCalloutKey(inlinkCallout);
+            if (!connections.has(inlinkKey)) {
+              connections.set(inlinkKey, /* @__PURE__ */ new Set());
+            }
+            connections.get(inlinkKey).add(calloutKey);
+            discoverAtDepth(inlinkCallout, currentDepth + 1, maxDepth, pathVisited);
           }
         }
-      }
-    });
-    return relatedCallouts;
+      });
+    };
+    discoverAtDepth(selectedCallout, 0, this.settings.graphConnectionDepth);
+    return { callouts: relatedCallouts, connections };
   }
   /**
    * 根据callout类型获取对应的canvas颜色
@@ -2207,6 +2206,10 @@ var CalloutOrganizerSettingTab = class extends import_obsidian.PluginSettingTab 
     const canvasContainer = containerEl.createEl("div", { cls: "callout-settings-indent" });
     new import_obsidian.Setting(canvasContainer).setName("Canvas Storage Folder").setDesc("Folder where callout canvas files will be stored (relative to vault root)").addText((text) => text.setPlaceholder("Callout Connections").setValue(this.plugin.settings.canvasStorageFolder).onChange(async (value) => {
       this.plugin.settings.canvasStorageFolder = value || "Callout Connections";
+      await this.plugin.saveSettings();
+    }));
+    new import_obsidian.Setting(canvasContainer).setName("Graph Connection Depth").setDesc("How many levels of connections to show in graph view (1 = direct connections only, 2 = include connections of connected callouts, etc.)").addSlider((slider) => slider.setLimits(1, 5, 1).setValue(this.plugin.settings.graphConnectionDepth).setDynamicTooltip().onChange(async (value) => {
+      this.plugin.settings.graphConnectionDepth = value;
       await this.plugin.saveSettings();
     }));
     containerEl.createEl("h3", { text: "Display Options" });

@@ -184,6 +184,25 @@ MIT License - see LICENSE file for details
 
 ## Changelog
 
+### Version 1.3.0
+- 🏗️ **Major Architectural Improvements**:
+  - **Simplified Relationship Model**: Removed inlinks/outlinks redundancy - now uses only outlinks for cleaner data structure
+  - **Precise Canvas Control**: Enhanced canvas relationship management to process only specific fromNode edges based on canvas filename
+  - **Smart Canvas Analysis**: Added `extractCalloutFromCanvasName()` function with format `callout-{filename}-{calloutID}.canvas`
+- 🎨 **Enhanced Visual Design**:
+  - **Circular Bidirectional Connections**: Redesigned double-arrow connections to use elegant circular paths (right→right, left→left)
+  - **Improved Layout**: Bidirectional nodes now positioned vertically (top-bottom) for better visual appeal
+  - **Beautiful Loop Visualization**: Creates intuitive circular representation of bidirectional relationships
+- ⚡ **Technical Optimizations**:
+  - **Streamlined Interface**: Removed `inlinks` property from `CalloutItem` interface
+  - **Enhanced Graph Logic**: Updated `getRelatedCallouts()` to compute inlinks dynamically from outlinks
+  - **Optimized Canvas Processing**: Canvas analysis focuses on specific relationship ownership per file
+  - **Better Relationship Detection**: Improved bidirectional relationship categorization in graph view
+- 🚀 **User Experience Improvements**:
+  - **Precise Relationship Control**: Delete specific relationships by editing corresponding canvas files
+  - **Cleaner Data Model**: Reduced redundancy while maintaining full functionality
+  - **Enhanced Graph Visualization**: More intuitive and aesthetically pleasing connection patterns
+
 ### Version 1.2.3
 - 🚀 **Performance Improvements**:
   - **Major Cache Optimization**: Fixed critical performance issue where cache was loaded multiple times during refresh (once per file). Now loads cache only once, dramatically improving performance for large vaults

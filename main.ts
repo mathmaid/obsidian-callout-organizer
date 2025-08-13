@@ -30,6 +30,7 @@ interface CalloutOrganizerSettings {
     enableFileCache: boolean;
     // Canvas settings
     canvasStorageFolder: string;
+    graphConnectionDepth: number;
     // Display options
     showFilenames: boolean;
     showH1Headers: boolean;
@@ -63,6 +64,7 @@ const DEFAULT_SETTINGS: CalloutOrganizerSettings = {
     enableFileCache: true,
     // Canvas settings
     canvasStorageFolder: 'Callout Connections',
+    graphConnectionDepth: 2,
     // Display options - show all by default
     showFilenames: true,
     showH1Headers: true,
@@ -1747,157 +1749,142 @@ export default class CalloutOrganizerPlugin extends Plugin {
             };
 
             // 添加相关的 callouts 作为节点并创建边
-            const relatedCallouts = await this.getRelatedCallouts(selectedCallout);
+            const relatedData = await this.getRelatedCallouts(selectedCallout);
+            const relatedCallouts = relatedData.callouts;
+            const allConnections = relatedData.connections;
             const mainCalloutId = `${selectedCallout.file}#^${selectedCallout.calloutID}`;
             
-            // 分类callouts：单向inlinks, 单向outlinks, 双向连接
-            const inlinksCallouts: CalloutItem[] = [];
-            const outlinksCallouts: CalloutItem[] = [];
-            const bidirectionalCallouts: CalloutItem[] = [];
+            // 使用层级布局显示多层连接
+            const getCalloutKey = (callout: CalloutItem) => `${callout.file}:${callout.calloutID}`;
+            const mainCalloutKey = getCalloutKey(selectedCallout);
             
-            relatedCallouts.forEach(callout => {
-                // 检查是否是outlink（selectedCallout指向这个callout）
-                const isOutlink = selectedCallout.outlinks?.some(([file, id]) => 
-                    file === callout.file && id === callout.calloutID
-                );
+            // 为每个callout分配层级和位置
+            const layoutData = new Map<string, {callout: CalloutItem, x: number, y: number, level: number}>();
+            
+            // 计算节点层级（距离主节点的最短距离）
+            const calculateLevel = (calloutKey: string, visited = new Set<string>()): number => {
+                if (calloutKey === mainCalloutKey) return 0;
+                if (visited.has(calloutKey)) return Infinity; // 防止循环
+                visited.add(calloutKey);
                 
-                // 检查是否是inlink（这个callout指向selectedCallout）
-                const isInlink = callout.outlinks?.some(([file, id]) => 
-                    file === selectedCallout.file && id === selectedCallout.calloutID
-                );
+                let minLevel = Infinity;
                 
-                if (isInlink && isOutlink) {
-                    bidirectionalCallouts.push(callout);
-                } else if (isInlink) {
-                    inlinksCallouts.push(callout);
-                } else if (isOutlink) {
-                    outlinksCallouts.push(callout);
+                // 检查所有连接中的最短路径
+                for (const [fromKey, toKeys] of allConnections) {
+                    if (toKeys.has(calloutKey)) {
+                        const fromLevel = calculateLevel(fromKey, new Set(visited));
+                        minLevel = Math.min(minLevel, fromLevel + 1);
+                    }
+                    if (fromKey === calloutKey) {
+                        for (const toKey of toKeys) {
+                            if (toKey === mainCalloutKey) {
+                                minLevel = Math.min(minLevel, 1);
+                            }
+                        }
+                    }
                 }
+                
+                return minLevel;
+            };
+            
+            // 为每个相关callout计算布局信息
+            const calloutsByLevel = new Map<number, CalloutItem[]>();
+            relatedCallouts.forEach((callout: CalloutItem) => {
+                const calloutKey = getCalloutKey(callout);
+                const level = calculateLevel(calloutKey);
+                
+                if (!calloutsByLevel.has(level)) {
+                    calloutsByLevel.set(level, []);
+                }
+                calloutsByLevel.get(level)!.push(callout);
             });
             
-            // 添加单向inlinks节点（左侧）
-            inlinksCallouts.forEach((callout, index) => {
-                const y = (index - (inlinksCallouts.length - 1) / 2) * 200;
+            // 布局节点
+            const nodeSpacing = 250;
+            const levelSpacing = 500;
+            
+            calloutsByLevel.forEach((callouts, level) => {
+                callouts.forEach((callout, index) => {
+                    const calloutKey = getCalloutKey(callout);
+                    const totalAtLevel = callouts.length;
+                    
+                    // 计算x位置（左右分布）
+                    let x: number;
+                    if (level === 1) {
+                        // 第一层：左右分布
+                        x = (index - (totalAtLevel - 1) / 2) * levelSpacing;
+                    } else {
+                        // 更远层级：环形分布
+                        const angle = (index / totalAtLevel) * 2 * Math.PI;
+                        x = Math.cos(angle) * level * levelSpacing;
+                    }
+                    
+                    // 计算y位置
+                    let y: number;
+                    if (level === 1) {
+                        y = (index - (totalAtLevel - 1) / 2) * nodeSpacing;
+                    } else {
+                        const angle = (index / totalAtLevel) * 2 * Math.PI;
+                        y = Math.sin(angle) * level * levelSpacing;
+                    }
+                    
+                    layoutData.set(calloutKey, {
+                        callout,
+                        x,
+                        y,
+                        level
+                    });
+                });
+            });
+            
+            // 添加所有节点到canvas
+            layoutData.forEach(({callout, x, y, level}) => {
                 const calloutId = `${callout.file}#^${callout.calloutID}`;
+                
+                // 根据层级调整节点大小
+                const nodeWidth = Math.max(300, 400 - level * 25);
+                const nodeHeight = Math.max(120, 200 - level * 20);
                 
                 canvasData.nodes.push({
                     id: calloutId,
                     type: "text",
                     text: `![[${callout.file}#^${callout.calloutID}]]`,
-                    x: -600,
-                    y: y,
-                    width: 350,
-                    height: 150,
+                    x: Math.round(x),
+                    y: Math.round(y),
+                    width: nodeWidth,
+                    height: nodeHeight,
                     color: this.getCanvasColorForCallout(callout.type)
-                });
-                
-                // 创建从inlink到主callout的边
-                (canvasData.edges as any[]).push({
-                    id: `edge-${calloutId}-to-main`,
-                    fromNode: calloutId,
-                    fromSide: "right",
-                    toNode: mainCalloutId,
-                    toSide: "left"
                 });
             });
             
-            // 添加单向outlinks节点（右侧）
-            outlinksCallouts.forEach((callout, index) => {
-                const y = (index - (outlinksCallouts.length - 1) / 2) * 200;
-                const calloutId = `${callout.file}#^${callout.calloutID}`;
-                
-                canvasData.nodes.push({
-                    id: calloutId,
-                    type: "text",
-                    text: `![[${callout.file}#^${callout.calloutID}]]`,
-                    x: 600,
-                    y: y,
-                    width: 350,
-                    height: 150,
-                    color: this.getCanvasColorForCallout(callout.type)
-                });
-                
-                // 创建从主callout到outlink的边
-                (canvasData.edges as any[]).push({
-                    id: `edge-main-to-${calloutId}`,
-                    fromNode: mainCalloutId,
-                    fromSide: "right",
-                    toNode: calloutId,
-                    toSide: "left"
-                });
-            });
-            
-            // 添加双向连接节点（中央上下排列）
-            if (bidirectionalCallouts.length > 0) {
-                // 调整主节点位置以便为双向节点留出空间
-                if (bidirectionalCallouts.length === 1) {
-                    // 一个双向节点：放在下方，便于圆形连接
-                    const callout = bidirectionalCallouts[0];
-                    const calloutId = `${callout.file}#^${callout.calloutID}`;
+            // 添加所有连接边
+            let edgeId = 0;
+            allConnections.forEach((toKeys, fromKey) => {
+                toKeys.forEach(toKey => {
+                    const fromCallout = relatedCallouts.find(c => getCalloutKey(c) === fromKey) || 
+                                       (fromKey === mainCalloutKey ? selectedCallout : null);
+                    const toCallout = relatedCallouts.find(c => getCalloutKey(c) === toKey) ||
+                                     (toKey === mainCalloutKey ? selectedCallout : null);
                     
-                    canvasData.nodes.push({
-                        id: calloutId,
-                        type: "text",
-                        text: `![[${callout.file}#^${callout.calloutID}]]`,
-                        x: 0,   // 与主节点水平对齐
-                        y: 300, // 放在下方
-                        width: 350,
-                        height: 150,
-                        color: this.getCanvasColorForCallout(callout.type)
-                    });
-                    
-                    // 创建圆形双向连接：A右侧→B右侧，B左侧→A左侧
-                    (canvasData.edges as any[]).push({
-                        id: `edge-main-to-${calloutId}`,
-                        fromNode: mainCalloutId,
-                        fromSide: "right",
-                        toNode: calloutId,
-                        toSide: "right"
-                    });
-                    
-                    (canvasData.edges as any[]).push({
-                        id: `edge-${calloutId}-to-main`,
-                        fromNode: calloutId,
-                        fromSide: "left",
-                        toNode: mainCalloutId,
-                        toSide: "left"
-                    });
-                } else {
-                    // 多个双向节点：垂直排列在下方，方便圆形连接
-                    bidirectionalCallouts.forEach((callout, index) => {
-                        const x = (index - (bidirectionalCallouts.length - 1) / 2) * 400; // 水平分布
-                        const calloutId = `${callout.file}#^${callout.calloutID}`;
+                    if (fromCallout && toCallout) {
+                        const fromId = `${fromCallout.file}#^${fromCallout.calloutID}`;
+                        const toId = `${toCallout.file}#^${toCallout.calloutID}`;
                         
-                        canvasData.nodes.push({
-                            id: calloutId,
-                            type: "text",
-                            text: `![[${callout.file}#^${callout.calloutID}]]`,
-                            x: x, // 水平分布
-                            y: 300, // 都放在下方
-                            width: 350,
-                            height: 150,
-                            color: this.getCanvasColorForCallout(callout.type)
-                        });
+                        // 避免重复边（检查反向连接）
+                        const reverseEdgeExists = Array.from(allConnections.get(toKey) || []).includes(fromKey);
                         
-                        // 为每个双向节点创建圆形双向连接
                         (canvasData.edges as any[]).push({
-                            id: `edge-main-to-${calloutId}`,
-                            fromNode: mainCalloutId,
+                            id: `edge-${++edgeId}`,
+                            fromNode: fromId,
                             fromSide: "right",
-                            toNode: calloutId,
-                            toSide: "right"
+                            toNode: toId,
+                            toSide: "left",
+                            // 双向连接时添加特殊标识
+                            label: reverseEdgeExists ? "↔" : undefined
                         });
-                        
-                        (canvasData.edges as any[]).push({
-                            id: `edge-${calloutId}-to-main`,
-                            fromNode: calloutId,
-                            fromSide: "left",
-                            toNode: mainCalloutId,
-                            toSide: "left"
-                        });
-                    });
-                }
-            }
+                    }
+                });
+            });
 
             // 始终重新生成canvas文件以反映最新的连接关系
             try {
@@ -1930,7 +1917,7 @@ export default class CalloutOrganizerPlugin extends Plugin {
         }
     }
 
-    private async getRelatedCallouts(selectedCallout: CalloutItem): Promise<CalloutItem[]> {
+    private async getRelatedCallouts(selectedCallout: CalloutItem): Promise<{callouts: CalloutItem[], connections: Map<string, Set<string>>}> {
         const cache = await this.loadCalloutCache();
         const allCallouts = cache?.callouts || [];
         
@@ -1945,37 +1932,81 @@ export default class CalloutOrganizerPlugin extends Plugin {
         
         const relatedCallouts: CalloutItem[] = [];
         const addedCalloutKeys = new Set<string>();
+        const connections = new Map<string, Set<string>>(); // fromKey -> Set<toKey>
         
-        // 添加outlinks callouts（直接连接）
-        if (selectedCallout.outlinks) {
-            selectedCallout.outlinks.forEach(([filename, calloutID]) => {
-                const key = `${filename}:${calloutID}`;
-                const callout = calloutMap.get(key);
-                if (callout && !addedCalloutKeys.has(key)) {
-                    relatedCallouts.push(callout);
-                    addedCalloutKeys.add(key);
-                }
-            });
-        }
+        // Helper function to get callout key
+        const getCalloutKey = (callout: CalloutItem) => `${callout.file}:${callout.calloutID}`;
         
-        // 查找inlinks callouts（那些outlinks中包含selectedCallout的callouts）
-        allCallouts.forEach(callout => {
-            if (callout.calloutID && callout.outlinks) {
-                const hasLinkToSelected = callout.outlinks.some(([filename, calloutID]) => 
-                    filename === selectedCallout.file && calloutID === selectedCallout.calloutID
-                );
-                
-                if (hasLinkToSelected) {
-                    const key = `${callout.file}:${callout.calloutID}`;
-                    if (!addedCalloutKeys.has(key)) {
-                        relatedCallouts.push(callout);
-                        addedCalloutKeys.add(key);
+        // Helper function to discover connections at a specific depth
+        // visited is now passed per recursion path to prevent blocking legitimate multi-paths
+        const discoverAtDepth = (callout: CalloutItem, currentDepth: number, maxDepth: number, visited: Set<string> = new Set()) => {
+            const calloutKey = getCalloutKey(callout);
+            
+            if (visited.has(calloutKey)) {
+                return; // Prevent infinite loops in this path
+            }
+            
+            // Create a new visited set for this path
+            const pathVisited = new Set(visited);
+            pathVisited.add(calloutKey);
+            
+            // Add current callout to results if not already added and not the root
+            if (currentDepth > 0 && !addedCalloutKeys.has(calloutKey)) {
+                relatedCallouts.push(callout);
+                addedCalloutKeys.add(calloutKey);
+            }
+            
+            // Stop recursion if we've reached max depth, but still process current node
+            if (currentDepth >= maxDepth) {
+                return;
+            }
+            
+            // Process outlinks
+            if (callout.outlinks) {
+                callout.outlinks.forEach(([filename, calloutID]) => {
+                    const targetKey = `${filename}:${calloutID}`;
+                    const targetCallout = calloutMap.get(targetKey);
+                    
+                    if (targetCallout) {
+                        // Record the connection
+                        if (!connections.has(calloutKey)) {
+                            connections.set(calloutKey, new Set());
+                        }
+                        connections.get(calloutKey)!.add(targetKey);
+                        
+                        // Recursively discover connections with path-specific visited set
+                        discoverAtDepth(targetCallout, currentDepth + 1, maxDepth, pathVisited);
+                    }
+                });
+            }
+            
+            // Process inlinks (find callouts that link to current callout)
+            allCallouts.forEach(inlinkCallout => {
+                if (inlinkCallout.calloutID && inlinkCallout.outlinks) {
+                    const hasLinkToCurrent = inlinkCallout.outlinks.some(([filename, calloutID]) => 
+                        filename === callout.file && calloutID === callout.calloutID
+                    );
+                    
+                    if (hasLinkToCurrent) {
+                        const inlinkKey = getCalloutKey(inlinkCallout);
+                        
+                        // Record the connection
+                        if (!connections.has(inlinkKey)) {
+                            connections.set(inlinkKey, new Set());
+                        }
+                        connections.get(inlinkKey)!.add(calloutKey);
+                        
+                        // Recursively discover connections with path-specific visited set
+                        discoverAtDepth(inlinkCallout, currentDepth + 1, maxDepth, pathVisited);
                     }
                 }
-            }
-        });
+            });
+        };
         
-        return relatedCallouts;
+        // Start discovery from the selected callout
+        discoverAtDepth(selectedCallout, 0, this.settings.graphConnectionDepth);
+        
+        return { callouts: relatedCallouts, connections };
     }
 
     /**
@@ -2886,6 +2917,18 @@ class CalloutOrganizerSettingTab extends PluginSettingTab {
                 .setValue(this.plugin.settings.canvasStorageFolder)
                 .onChange(async (value) => {
                     this.plugin.settings.canvasStorageFolder = value || 'Callout Connections';
+                    await this.plugin.saveSettings();
+                }));
+
+        new Setting(canvasContainer)
+            .setName('Graph Connection Depth')
+            .setDesc('How many levels of connections to show in graph view (1 = direct connections only, 2 = include connections of connected callouts, etc.)')
+            .addSlider(slider => slider
+                .setLimits(1, 5, 1)
+                .setValue(this.plugin.settings.graphConnectionDepth)
+                .setDynamicTooltip()
+                .onChange(async (value) => {
+                    this.plugin.settings.graphConnectionDepth = value;
                     await this.plugin.saveSettings();
                 }));
 

@@ -1,6 +1,6 @@
 {
   "version": "1.3",
-  "timestamp": 1755044808285,
+  "timestamp": 1755050655221,
   "vaultPath": "测试仓库",
   "callouts": [
     {
@@ -448,7 +448,7 @@
     "writing-ide-server/README.md": "2025-08-11 19:41:48",
     "Test.md": "2025-08-12 23:48:13",
     "Tasks.md": "2025-08-12 21:44:19",
-    "Plugin Maintenance Guide.md": "2025-08-12 10:52:57",
+    "Plugin Maintenance Guide.md": "2025-08-13 08:29:52",
     "Obsidian Built-in Callouts.md": "2025-08-07 15:04:29",
     "Custom Callouts.md": "2025-08-08 23:51:20",
     "CLAUDE.md": "2025-08-12 16:06:00"
