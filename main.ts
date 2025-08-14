@@ -106,7 +106,9 @@ interface CalloutItem {
     fileModTime?: string; // Human-readable file modification time (YYYY-MM-DD HH:mm:ss)
     calloutCreatedTime?: string; // Human-readable time when callout was first created (YYYY-MM-DD HH:mm:ss)
     calloutModifyTime?: string;  // Human-readable time when callout was last modified (YYYY-MM-DD HH:mm:ss)
-    outlinks?: [string, string][]; // Array of [filename, calloutID] pairs that this callout links TO
+    outlinks?: [string, string, string?][]; // Array of [filename, calloutID, label?] tuples that this callout links TO
+    canvasWidth?: number;  // Canvas node width for this callout (when used as main node)
+    canvasHeight?: number; // Canvas node height for this callout (when used as main node)
 }
 
 interface HeadingInfo {
@@ -1751,6 +1753,11 @@ export default class CalloutOrganizerPlugin extends Plugin {
             // 创建基础的 canvas 数据结构
             // 为主节点生成临时ID
             const mainNodeId = `node-${Date.now()}-main`;
+            
+            // Use saved dimensions if available, otherwise use defaults
+            const mainNodeWidth = selectedCallout.canvasWidth || 400;
+            const mainNodeHeight = selectedCallout.canvasHeight || 200;
+            
             const canvasData = {
                 nodes: [
                     {
@@ -1760,8 +1767,8 @@ export default class CalloutOrganizerPlugin extends Plugin {
                         subpath: `#^${selectedCallout.calloutID}`,
                         x: 0,
                         y: 0,
-                        width: 400,
-                        height: 200,
+                        width: mainNodeWidth,
+                        height: mainNodeHeight,
                         color: this.getCanvasColorForCallout(selectedCallout.type)
                     }
                 ],
@@ -1791,21 +1798,51 @@ export default class CalloutOrganizerPlugin extends Plugin {
             const directOutlinks: CalloutItem[] = [];
             const bidirectionalLinks: CalloutItem[] = [];
             
+            // Create global edge label map from ALL callouts
+            const globalEdgeLabels = new Map<string, string>(); // Map from "fromFile:fromID->toFile:toID" to label
+            allCallouts.forEach(callout => {
+                if (callout.outlinks) {
+                    callout.outlinks.forEach(([filename, calloutID, label]) => {
+                        if (label) {
+                            const fromKey = `${callout.file}:${callout.calloutID}`;
+                            const toKey = `${filename}:${calloutID}`;
+                            const edgeKey = `${fromKey}->${toKey}`;
+                            globalEdgeLabels.set(edgeKey, label);
+                        }
+                    });
+                }
+            });
+            
             // 处理主节点的outlinks（右侧节点）
+            const outlinkLabels = new Map<string, string>(); // Map to store labels for outlinks from main node
             if (selectedCallout.outlinks) {
-                selectedCallout.outlinks.forEach(([filename, calloutID]) => {
+                selectedCallout.outlinks.forEach(([filename, calloutID, label]) => {
                     const targetKey = `${filename}:${calloutID}`;
-                    const targetCallout = calloutMap.get(targetKey);
-                    if (targetCallout) {
-                        // 检查是否是双向连接
-                        const isTargetLinkingBack = targetCallout.outlinks?.some(([f, cId]) => 
-                            f === selectedCallout.file && cId === selectedCallout.calloutID
-                        );
-                        
-                        if (isTargetLinkingBack) {
-                            bidirectionalLinks.push(targetCallout);
-                        } else {
-                            directOutlinks.push(targetCallout);
+                    
+                    // Store label if present
+                    if (label) {
+                        outlinkLabels.set(targetKey, label);
+                    }
+                    
+                    // Check if this is a self-connection
+                    const isSelfConnection = filename === selectedCallout.file && calloutID === selectedCallout.calloutID;
+                    
+                    if (isSelfConnection) {
+                        // Skip self-connections - don't create edges for callouts linking to themselves
+                        // Self-referential edges are meaningless for navigation
+                    } else {
+                        const targetCallout = calloutMap.get(targetKey);
+                        if (targetCallout) {
+                            // 检查是否是双向连接
+                            const isTargetLinkingBack = targetCallout.outlinks?.some(([f, cId]) => 
+                                f === selectedCallout.file && cId === selectedCallout.calloutID
+                            );
+                            
+                            if (isTargetLinkingBack) {
+                                bidirectionalLinks.push(targetCallout);
+                            } else {
+                                directOutlinks.push(targetCallout);
+                            }
                         }
                     }
                 });
@@ -1820,13 +1857,19 @@ export default class CalloutOrganizerPlugin extends Plugin {
                     
                     if (hasLinkToMain) {
                         const calloutKey = getCalloutKey(callout);
-                        // 检查是否已经作为双向连接处理过
-                        const alreadyProcessed = bidirectionalLinks.some(biCallout => 
-                            getCalloutKey(biCallout) === calloutKey
-                        );
                         
-                        if (!alreadyProcessed) {
-                            directInlinks.push(callout);
+                        // Skip self-connections as they're already handled in bidirectional links
+                        const isSelfConnection = calloutKey === getCalloutKey(selectedCallout);
+                        
+                        if (!isSelfConnection) {
+                            // 检查是否已经作为双向连接处理过
+                            const alreadyProcessed = bidirectionalLinks.some(biCallout => 
+                                getCalloutKey(biCallout) === calloutKey
+                            );
+                            
+                            if (!alreadyProcessed) {
+                                directInlinks.push(callout);
+                            }
                         }
                     }
                 }
@@ -1837,7 +1880,7 @@ export default class CalloutOrganizerPlugin extends Plugin {
             
             // 布局参数
             const nodeSpacing = 280;
-            const levelSpacing = 600;
+            const levelSpacing = Math.max(600, mainNodeWidth + 200); // Base spacing on main node width + margin
             const bidirectionalSpacing = 150;
             
             // 左侧布局：inlinks
@@ -1893,9 +1936,12 @@ export default class CalloutOrganizerPlugin extends Plugin {
             // 添加所有节点到canvas
             let nodeIdCounter = 0;
             layoutData.forEach(({callout, x, y, level}) => {
-                // 根据层级调整节点大小
-                const nodeWidth = Math.max(300, 400 - level * 25);
-                const nodeHeight = Math.max(120, 200 - level * 20);
+                // Use saved dimensions if available, otherwise calculate based on level
+                const defaultWidth = Math.max(300, 400 - level * 25);
+                const defaultHeight = Math.max(120, 200 - level * 20);
+                
+                const nodeWidth = callout.canvasWidth || defaultWidth;
+                const nodeHeight = callout.canvasHeight || defaultHeight;
                 
                 // 为每个节点生成临时ID
                 const nodeId = `node-${Date.now()}-${++nodeIdCounter}`;
@@ -1938,13 +1984,22 @@ export default class CalloutOrganizerPlugin extends Plugin {
                     const calloutKey = getCalloutKey(callout);
                     const fromNode = nodeMap.get(calloutKey);
                     if (fromNode) {
-                        (canvasData.edges as any[]).push({
+                        const edge: any = {
                             id: `edge-${++edgeId}`,
                             fromNode: fromNode.id,
                             fromSide: "right",
                             toNode: mainNode.id,
                             toSide: "left"
-                        });
+                        };
+                        
+                        // Check for global edge label
+                        const edgeKey = `${calloutKey}->${mainNodeKey}`;
+                        const label = globalEdgeLabels.get(edgeKey);
+                        if (label) {
+                            edge.label = label;
+                        }
+                        
+                        (canvasData.edges as any[]).push(edge);
                     }
                 });
                 
@@ -1953,13 +2008,24 @@ export default class CalloutOrganizerPlugin extends Plugin {
                     const calloutKey = getCalloutKey(callout);
                     const toNode = nodeMap.get(calloutKey);
                     if (toNode) {
-                        (canvasData.edges as any[]).push({
+                        const edge: any = {
                             id: `edge-${++edgeId}`,
                             fromNode: mainNode.id,
                             fromSide: "right",
                             toNode: toNode.id,
                             toSide: "left"
-                        });
+                        };
+                        
+                        // Add label if present (check global labels first, then local)
+                        const globalEdgeKey = `${mainNodeKey}->${calloutKey}`;
+                        const globalLabel = globalEdgeLabels.get(globalEdgeKey);
+                        const localLabel = outlinkLabels.get(calloutKey);
+                        const label = globalLabel || localLabel;
+                        if (label) {
+                            edge.label = label;
+                        }
+                        
+                        (canvasData.edges as any[]).push(edge);
                     }
                 });
                 
@@ -1971,23 +2037,43 @@ export default class CalloutOrganizerPlugin extends Plugin {
                         const layoutInfo = layoutData.get(calloutKey);
                         const isAbove = layoutInfo && layoutInfo.y < 0;
                         
-                        // 主节点到双向节点
-                        (canvasData.edges as any[]).push({
+                        // 主节点到双向节点 - right to right pattern
+                        const forwardEdge: any = {
                             id: `edge-${++edgeId}`,
                             fromNode: mainNode.id,
-                            fromSide: isAbove ? "top" : "bottom",
+                            fromSide: "right",
                             toNode: biNode.id,
-                            toSide: isAbove ? "bottom" : "top"
-                        });
+                            toSide: "right"
+                        };
                         
-                        // 双向节点到主节点  
-                        (canvasData.edges as any[]).push({
+                        // Add label for forward edge if present (check global labels first, then local)
+                        const globalForwardKey = `${mainNodeKey}->${calloutKey}`;
+                        const globalForwardLabel = globalEdgeLabels.get(globalForwardKey);
+                        const localForwardLabel = outlinkLabels.get(calloutKey);
+                        const forwardLabel = globalForwardLabel || localForwardLabel;
+                        if (forwardLabel) {
+                            forwardEdge.label = forwardLabel;
+                        }
+                        
+                        (canvasData.edges as any[]).push(forwardEdge);
+                        
+                        // 双向节点到主节点 - left to left pattern
+                        const reverseEdge: any = {
                             id: `edge-${++edgeId}`,
                             fromNode: biNode.id,
-                            fromSide: isAbove ? "bottom" : "top",
+                            fromSide: "left",
                             toNode: mainNode.id,
-                            toSide: isAbove ? "top" : "bottom"
-                        });
+                            toSide: "left"
+                        };
+                        
+                        // Add label for reverse edge if present
+                        const globalReverseKey = `${calloutKey}->${mainNodeKey}`;
+                        const reverseLabel = globalEdgeLabels.get(globalReverseKey);
+                        if (reverseLabel) {
+                            reverseEdge.label = reverseLabel;
+                        }
+                        
+                        (canvasData.edges as any[]).push(reverseEdge);
                     }
                 });
             }
@@ -2332,7 +2418,7 @@ export default class CalloutOrganizerPlugin extends Plugin {
                     if (canvasData.edges && Array.isArray(canvasData.edges) && canvasData.nodes && Array.isArray(canvasData.nodes)) {
                         // 创建节点ID到[filename, calloutID]的映射
                         const nodeIdToCallout = new Map<string, [string, string]>();
-                        let targetFromNodeId: string | null = null;
+                        const targetFromNodeIds: string[] = []; // Collect ALL node IDs representing the target callout
                         
                         canvasData.nodes.forEach((node: any) => {
                             if (node.type === 'text' && node.text) {
@@ -2348,7 +2434,12 @@ export default class CalloutOrganizerPlugin extends Plugin {
                                     // 检查是否是我们要找的源节点 (比较时去掉.md扩展名)
                                     const targetFilename = targetCallout.filename.replace(/\.md$/, '');
                                     if (filename === targetFilename && calloutID === targetCallout.calloutID) {
-                                        targetFromNodeId = node.id;
+                                        targetFromNodeIds.push(node.id);
+                                        // Extract and save main node dimensions for text nodes
+                                        if (node.width && node.height) {
+                                            targetCalloutItem.canvasWidth = node.width;
+                                            targetCalloutItem.canvasHeight = node.height;
+                                        }
                                     }
                                 } else {
                                     // Text node does not match embed pattern
@@ -2364,18 +2455,23 @@ export default class CalloutOrganizerPlugin extends Plugin {
                                     // 检查是否是我们要找的源节点 (比较时去掉.md扩展名)
                                     const targetFilename = targetCallout.filename.replace(/\.md$/, '');
                                     if (filename === targetFilename && calloutID === targetCallout.calloutID) {
-                                        targetFromNodeId = node.id;
+                                        targetFromNodeIds.push(node.id);
+                                        // Extract and save main node dimensions for file nodes
+                                        if (node.width && node.height) {
+                                            targetCalloutItem.canvasWidth = node.width;
+                                            targetCalloutItem.canvasHeight = node.height;
+                                        }
                                     }
                                 }
                             }
                         });
                         
-                        if (!targetFromNodeId) {
+                        if (targetFromNodeIds.length === 0) {
                             continue;
                         }
                         
-                        // 分析边（连接）- 使用找到的实际节点ID
-                        const targetEdges = canvasData.edges.filter((edge: any) => edge.fromNode === targetFromNodeId);
+                        // 分析边（连接）- 使用找到的所有节点ID
+                        const targetEdges = canvasData.edges.filter((edge: any) => targetFromNodeIds.includes(edge.fromNode));
                         // Found edges for target node
                         
                         targetEdges.forEach((edge: any) => {
@@ -2400,9 +2496,51 @@ export default class CalloutOrganizerPlugin extends Plugin {
                                     fromCallout.outlinks = fromCallout.outlinks || [];
                                     // Add .md extension to toFile for consistency  
                                     const toFileWithExt = `${toFile}.md`;
+                                    
+                                    // Extract edge label if present
+                                    const edgeLabel = edge.label || undefined;
+                                    
                                     const outLinkExists = fromCallout.outlinks.some(([file, id]) => file === toFileWithExt && id === toCalloutID);
                                     if (!outLinkExists) {
-                                        fromCallout.outlinks.push([toFileWithExt, toCalloutID]);
+                                        if (edgeLabel) {
+                                            fromCallout.outlinks.push([toFileWithExt, toCalloutID, edgeLabel]);
+                                        } else {
+                                            fromCallout.outlinks.push([toFileWithExt, toCalloutID]);
+                                        }
+                                    }
+                                }
+                            } else if (fromCalloutInfo) {
+                                // Handle edges from callout nodes to text nodes (potential self-connections)
+                                const toNode = canvasData.nodes.find((n: any) => n.id === toNodeId);
+                                if (toNode && toNode.type === 'text' && toNode.text) {
+                                    // Check if text node contains an embed reference
+                                    const embedMatch = toNode.text.match(/!\[\[([^#\]]+)#\^([^\]]+)\]\]/);
+                                    if (embedMatch) {
+                                        const [fromFile, fromCalloutID] = fromCalloutInfo;
+                                        const embedFilename = embedMatch[1];
+                                        const embedCalloutID = embedMatch[2];
+                                        
+                                        // Add .md extension to match callout map key format
+                                        const fromKeyWithExt = `${fromFile}.md:${fromCalloutID}`;
+                                        const fromCallout = calloutMap.get(fromKeyWithExt);
+                                        
+                                        if (fromCallout) {
+                                            fromCallout.outlinks = fromCallout.outlinks || [];
+                                            // Add .md extension to embedFilename for consistency
+                                            const embedFileWithExt = embedFilename.endsWith('.md') ? embedFilename : `${embedFilename}.md`;
+                                            
+                                            // Extract edge label if present
+                                            const edgeLabel = edge.label || undefined;
+                                            
+                                            const outLinkExists = fromCallout.outlinks.some(([file, id]) => file === embedFileWithExt && id === embedCalloutID);
+                                            if (!outLinkExists) {
+                                                if (edgeLabel) {
+                                                    fromCallout.outlinks.push([embedFileWithExt, embedCalloutID, edgeLabel]);
+                                                } else {
+                                                    fromCallout.outlinks.push([embedFileWithExt, embedCalloutID]);
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                             }

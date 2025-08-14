@@ -1,6 +1,6 @@
 {
   "version": "1.4",
-  "timestamp": 1755139147619,
+  "timestamp": 1755144035728,
   "vaultPath": "测试仓库",
   "callouts": [
     {
@@ -37,10 +37,17 @@
       "outlinks": [
         [
           "Obsidian Built-in Callouts.md",
-          "todo-h3dzun"
+          "todo-h3dzun",
+          "use"
+        ],
+        [
+          "Obsidian Built-in Callouts.md",
+          "info-luihej"
         ]
       ],
-      "calloutID": "summary-uc8im1"
+      "calloutID": "summary-uc8im1",
+      "canvasWidth": 173,
+      "canvasHeight": 163
     },
     {
       "file": "Obsidian Built-in Callouts.md",
@@ -63,8 +70,15 @@
       "fileModTime": "2025-08-07 15:04:29",
       "calloutCreatedTime": "2025-08-13 22:32:46",
       "calloutModifyTime": "2025-08-13 22:32:46",
-      "outlinks": [],
-      "calloutID": "info-luihej"
+      "outlinks": [
+        [
+          "Obsidian Built-in Callouts.md",
+          "summary-uc8im1"
+        ]
+      ],
+      "calloutID": "info-luihej",
+      "canvasWidth": 176,
+      "canvasHeight": 171
     },
     {
       "file": "Obsidian Built-in Callouts.md",
@@ -75,8 +89,15 @@
       "fileModTime": "2025-08-07 15:04:29",
       "calloutCreatedTime": "2025-08-13 22:32:46",
       "calloutModifyTime": "2025-08-13 22:32:46",
-      "outlinks": [],
-      "calloutID": "todo-h3dzun"
+      "outlinks": [
+        [
+          "Obsidian Built-in Callouts.md",
+          "info-luihej"
+        ]
+      ],
+      "calloutID": "todo-h3dzun",
+      "canvasWidth": 187,
+      "canvasHeight": 172
     },
     {
       "file": "Obsidian Built-in Callouts.md",
@@ -404,12 +425,12 @@
     }
   ],
   "fileModTimes": {
-    "Tasks.md": "2025-08-13 21:55:29",
     "writing-ide-server/README.md": "2025-08-11 19:41:48",
+    "Tasks.md": "2025-08-14 10:50:09",
     "Plugin Maintenance Guide.md": "2025-08-13 13:35:34",
-    "CLAUDE.md": "2025-08-13 22:49:21",
     "Obsidian Built-in Callouts.md": "2025-08-07 15:04:29",
-    "Custom Callouts.md": "2025-08-08 23:51:20"
+    "Custom Callouts.md": "2025-08-08 23:51:20",
+    "CLAUDE.md": "2025-08-14 10:55:28"
   },
   "calloutCreationTimes": {
     "Obsidian Built-in Callouts.md:4:note:Title": "2025-08-07 15:04:29",

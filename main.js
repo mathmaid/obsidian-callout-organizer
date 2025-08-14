@@ -1322,6 +1322,8 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
         await this.app.vault.createFolder(this.settings.canvasStorageFolder);
       }
       const mainNodeId = `node-${Date.now()}-main`;
+      const mainNodeWidth = selectedCallout.canvasWidth || 400;
+      const mainNodeHeight = selectedCallout.canvasHeight || 200;
       const canvasData = {
         nodes: [
           {
@@ -1331,8 +1333,8 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
             subpath: `#^${selectedCallout.calloutID}`,
             x: 0,
             y: 0,
-            width: 400,
-            height: 200,
+            width: mainNodeWidth,
+            height: mainNodeHeight,
             color: this.getCanvasColorForCallout(selectedCallout.type)
           }
         ],
@@ -1352,19 +1354,40 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
       const directInlinks = [];
       const directOutlinks = [];
       const bidirectionalLinks = [];
+      const globalEdgeLabels = /* @__PURE__ */ new Map();
+      allCallouts.forEach((callout) => {
+        if (callout.outlinks) {
+          callout.outlinks.forEach(([filename, calloutID, label]) => {
+            if (label) {
+              const fromKey = `${callout.file}:${callout.calloutID}`;
+              const toKey = `${filename}:${calloutID}`;
+              const edgeKey = `${fromKey}->${toKey}`;
+              globalEdgeLabels.set(edgeKey, label);
+            }
+          });
+        }
+      });
+      const outlinkLabels = /* @__PURE__ */ new Map();
       if (selectedCallout.outlinks) {
-        selectedCallout.outlinks.forEach(([filename, calloutID]) => {
+        selectedCallout.outlinks.forEach(([filename, calloutID, label]) => {
           var _a2;
           const targetKey = `${filename}:${calloutID}`;
-          const targetCallout = calloutMap.get(targetKey);
-          if (targetCallout) {
-            const isTargetLinkingBack = (_a2 = targetCallout.outlinks) == null ? void 0 : _a2.some(
-              ([f, cId]) => f === selectedCallout.file && cId === selectedCallout.calloutID
-            );
-            if (isTargetLinkingBack) {
-              bidirectionalLinks.push(targetCallout);
-            } else {
-              directOutlinks.push(targetCallout);
+          if (label) {
+            outlinkLabels.set(targetKey, label);
+          }
+          const isSelfConnection = filename === selectedCallout.file && calloutID === selectedCallout.calloutID;
+          if (isSelfConnection) {
+          } else {
+            const targetCallout = calloutMap.get(targetKey);
+            if (targetCallout) {
+              const isTargetLinkingBack = (_a2 = targetCallout.outlinks) == null ? void 0 : _a2.some(
+                ([f, cId]) => f === selectedCallout.file && cId === selectedCallout.calloutID
+              );
+              if (isTargetLinkingBack) {
+                bidirectionalLinks.push(targetCallout);
+              } else {
+                directOutlinks.push(targetCallout);
+              }
             }
           }
         });
@@ -1376,18 +1399,21 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
           );
           if (hasLinkToMain) {
             const calloutKey = getCalloutKey(callout);
-            const alreadyProcessed = bidirectionalLinks.some(
-              (biCallout) => getCalloutKey(biCallout) === calloutKey
-            );
-            if (!alreadyProcessed) {
-              directInlinks.push(callout);
+            const isSelfConnection = calloutKey === getCalloutKey(selectedCallout);
+            if (!isSelfConnection) {
+              const alreadyProcessed = bidirectionalLinks.some(
+                (biCallout) => getCalloutKey(biCallout) === calloutKey
+              );
+              if (!alreadyProcessed) {
+                directInlinks.push(callout);
+              }
             }
           }
         }
       });
       const layoutData = /* @__PURE__ */ new Map();
       const nodeSpacing = 280;
-      const levelSpacing = 600;
+      const levelSpacing = Math.max(600, mainNodeWidth + 200);
       const bidirectionalSpacing = 150;
       directInlinks.forEach((callout, index) => {
         const calloutKey = getCalloutKey(callout);
@@ -1430,8 +1456,10 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
       });
       let nodeIdCounter = 0;
       layoutData.forEach(({ callout, x, y, level }) => {
-        const nodeWidth = Math.max(300, 400 - level * 25);
-        const nodeHeight = Math.max(120, 200 - level * 20);
+        const defaultWidth = Math.max(300, 400 - level * 25);
+        const defaultHeight = Math.max(120, 200 - level * 20);
+        const nodeWidth = callout.canvasWidth || defaultWidth;
+        const nodeHeight = callout.canvasHeight || defaultHeight;
         const nodeId = `node-${Date.now()}-${++nodeIdCounter}`;
         canvasData.nodes.push({
           id: nodeId,
@@ -1464,26 +1492,40 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
           const calloutKey = getCalloutKey(callout);
           const fromNode = nodeMap.get(calloutKey);
           if (fromNode) {
-            canvasData.edges.push({
+            const edge = {
               id: `edge-${++edgeId}`,
               fromNode: fromNode.id,
               fromSide: "right",
               toNode: mainNode.id,
               toSide: "left"
-            });
+            };
+            const edgeKey = `${calloutKey}->${mainNodeKey}`;
+            const label = globalEdgeLabels.get(edgeKey);
+            if (label) {
+              edge.label = label;
+            }
+            canvasData.edges.push(edge);
           }
         });
         directOutlinks.forEach((callout) => {
           const calloutKey = getCalloutKey(callout);
           const toNode = nodeMap.get(calloutKey);
           if (toNode) {
-            canvasData.edges.push({
+            const edge = {
               id: `edge-${++edgeId}`,
               fromNode: mainNode.id,
               fromSide: "right",
               toNode: toNode.id,
               toSide: "left"
-            });
+            };
+            const globalEdgeKey = `${mainNodeKey}->${calloutKey}`;
+            const globalLabel = globalEdgeLabels.get(globalEdgeKey);
+            const localLabel = outlinkLabels.get(calloutKey);
+            const label = globalLabel || localLabel;
+            if (label) {
+              edge.label = label;
+            }
+            canvasData.edges.push(edge);
           }
         });
         bidirectionalLinks.forEach((callout) => {
@@ -1492,20 +1534,34 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
           if (biNode) {
             const layoutInfo = layoutData.get(calloutKey);
             const isAbove = layoutInfo && layoutInfo.y < 0;
-            canvasData.edges.push({
+            const forwardEdge = {
               id: `edge-${++edgeId}`,
               fromNode: mainNode.id,
-              fromSide: isAbove ? "top" : "bottom",
+              fromSide: "right",
               toNode: biNode.id,
-              toSide: isAbove ? "bottom" : "top"
-            });
-            canvasData.edges.push({
+              toSide: "right"
+            };
+            const globalForwardKey = `${mainNodeKey}->${calloutKey}`;
+            const globalForwardLabel = globalEdgeLabels.get(globalForwardKey);
+            const localForwardLabel = outlinkLabels.get(calloutKey);
+            const forwardLabel = globalForwardLabel || localForwardLabel;
+            if (forwardLabel) {
+              forwardEdge.label = forwardLabel;
+            }
+            canvasData.edges.push(forwardEdge);
+            const reverseEdge = {
               id: `edge-${++edgeId}`,
               fromNode: biNode.id,
-              fromSide: isAbove ? "bottom" : "top",
+              fromSide: "left",
               toNode: mainNode.id,
-              toSide: isAbove ? "top" : "bottom"
-            });
+              toSide: "left"
+            };
+            const globalReverseKey = `${calloutKey}->${mainNodeKey}`;
+            const reverseLabel = globalEdgeLabels.get(globalReverseKey);
+            if (reverseLabel) {
+              reverseEdge.label = reverseLabel;
+            }
+            canvasData.edges.push(reverseEdge);
           }
         });
       }
@@ -1736,7 +1792,7 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
           }
           if (canvasData.edges && Array.isArray(canvasData.edges) && canvasData.nodes && Array.isArray(canvasData.nodes)) {
             const nodeIdToCallout = /* @__PURE__ */ new Map();
-            let targetFromNodeId = null;
+            const targetFromNodeIds = [];
             canvasData.nodes.forEach((node) => {
               if (node.type === "text" && node.text) {
                 const embedMatch = node.text.match(/!\[\[([^#\]]+)#\^([^\]]+)\]\]/);
@@ -1746,7 +1802,11 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
                   nodeIdToCallout.set(node.id, [filename, calloutID]);
                   const targetFilename = targetCallout.filename.replace(/\.md$/, "");
                   if (filename === targetFilename && calloutID === targetCallout.calloutID) {
-                    targetFromNodeId = node.id;
+                    targetFromNodeIds.push(node.id);
+                    if (node.width && node.height) {
+                      targetCalloutItem.canvasWidth = node.width;
+                      targetCalloutItem.canvasHeight = node.height;
+                    }
                   }
                 } else {
                 }
@@ -1758,15 +1818,19 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
                   nodeIdToCallout.set(node.id, [filename, calloutID]);
                   const targetFilename = targetCallout.filename.replace(/\.md$/, "");
                   if (filename === targetFilename && calloutID === targetCallout.calloutID) {
-                    targetFromNodeId = node.id;
+                    targetFromNodeIds.push(node.id);
+                    if (node.width && node.height) {
+                      targetCalloutItem.canvasWidth = node.width;
+                      targetCalloutItem.canvasHeight = node.height;
+                    }
                   }
                 }
               }
             });
-            if (!targetFromNodeId) {
+            if (targetFromNodeIds.length === 0) {
               continue;
             }
-            const targetEdges = canvasData.edges.filter((edge) => edge.fromNode === targetFromNodeId);
+            const targetEdges = canvasData.edges.filter((edge) => targetFromNodeIds.includes(edge.fromNode));
             targetEdges.forEach((edge) => {
               const fromNodeId = edge.fromNode;
               const toNodeId = edge.toNode;
@@ -1780,9 +1844,39 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
                 if (fromCallout) {
                   fromCallout.outlinks = fromCallout.outlinks || [];
                   const toFileWithExt = `${toFile}.md`;
+                  const edgeLabel = edge.label || void 0;
                   const outLinkExists = fromCallout.outlinks.some(([file, id]) => file === toFileWithExt && id === toCalloutID);
                   if (!outLinkExists) {
-                    fromCallout.outlinks.push([toFileWithExt, toCalloutID]);
+                    if (edgeLabel) {
+                      fromCallout.outlinks.push([toFileWithExt, toCalloutID, edgeLabel]);
+                    } else {
+                      fromCallout.outlinks.push([toFileWithExt, toCalloutID]);
+                    }
+                  }
+                }
+              } else if (fromCalloutInfo) {
+                const toNode = canvasData.nodes.find((n) => n.id === toNodeId);
+                if (toNode && toNode.type === "text" && toNode.text) {
+                  const embedMatch = toNode.text.match(/!\[\[([^#\]]+)#\^([^\]]+)\]\]/);
+                  if (embedMatch) {
+                    const [fromFile, fromCalloutID] = fromCalloutInfo;
+                    const embedFilename = embedMatch[1];
+                    const embedCalloutID = embedMatch[2];
+                    const fromKeyWithExt = `${fromFile}.md:${fromCalloutID}`;
+                    const fromCallout = calloutMap.get(fromKeyWithExt);
+                    if (fromCallout) {
+                      fromCallout.outlinks = fromCallout.outlinks || [];
+                      const embedFileWithExt = embedFilename.endsWith(".md") ? embedFilename : `${embedFilename}.md`;
+                      const edgeLabel = edge.label || void 0;
+                      const outLinkExists = fromCallout.outlinks.some(([file, id]) => file === embedFileWithExt && id === embedCalloutID);
+                      if (!outLinkExists) {
+                        if (edgeLabel) {
+                          fromCallout.outlinks.push([embedFileWithExt, embedCalloutID, edgeLabel]);
+                        } else {
+                          fromCallout.outlinks.push([embedFileWithExt, embedCalloutID]);
+                        }
+                      }
+                    }
                   }
                 }
               }
