@@ -1,4 +1,4 @@
-import { App, Plugin, PluginSettingTab, Setting, TFile, TFolder, Modal, WorkspaceLeaf, ItemView, Notice, MarkdownRenderer, Component, setIcon, MarkdownView } from 'obsidian';
+import { App, Plugin, PluginSettingTab, Setting, TFile, TFolder, WorkspaceLeaf, ItemView, Notice, MarkdownRenderer, Component, setIcon, MarkdownView } from 'obsidian';
 
 // Constants for consistent icon rendering
 const OBSIDIAN_NOTE_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="svg-icon lucide-pencil"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"></path><path d="m15 5 4 4"></path></svg>`;
@@ -29,7 +29,6 @@ interface CalloutOrganizerSettings {
     // Cache settings (always enabled)
     // Canvas settings
     canvasStorageFolder: string;
-    enableCalloutConnections: boolean;
     // Display options
     showFilenames: boolean;
     showH1Headers: boolean;
@@ -62,7 +61,6 @@ const DEFAULT_SETTINGS: CalloutOrganizerSettings = {
     // Cache settings (always enabled)
     // Canvas settings
     canvasStorageFolder: 'Callout Connections',
-    enableCalloutConnections: false,
     // Display options - show all by default
     showFilenames: true,
     showH1Headers: true,
@@ -776,6 +774,9 @@ class CalloutOrganizerView extends ItemView {
         };
         
         const header = calloutEl.createEl("div", { cls: "callout-organizer-header" });
+        header.style.display = "flex";
+        header.style.alignItems = "center";
+        header.style.gap = "8px";
         
         // Use callout title if available, otherwise use callout type
         const displayTitle = callout.title || callout.type.charAt(0).toUpperCase() + callout.type.slice(1);
@@ -826,6 +827,39 @@ class CalloutOrganizerView extends ItemView {
                 titleEl.textContent = displayTitle;
                 titleEl.style.color = calloutColor;
             });
+        }
+        
+        // Add canvas button for all callouts
+        {
+            const canvasBtn = header.createEl("button", { 
+                cls: "callout-canvas-button",
+                title: "Open in Canvas"
+            });
+            setIcon(canvasBtn, "layout-dashboard");
+            canvasBtn.style.marginLeft = "auto";
+            canvasBtn.style.padding = "4px";
+            canvasBtn.style.border = "none";
+            canvasBtn.style.background = "var(--interactive-normal)";
+            canvasBtn.style.borderRadius = "4px";
+            canvasBtn.style.cursor = "pointer";
+            canvasBtn.style.display = "flex";
+            canvasBtn.style.alignItems = "center";
+            canvasBtn.style.justifyContent = "center";
+            canvasBtn.style.width = "24px";
+            canvasBtn.style.height = "24px";
+            
+            canvasBtn.onmouseover = () => {
+                canvasBtn.style.background = "var(--interactive-hover)";
+            };
+            canvasBtn.onmouseleave = () => {
+                canvasBtn.style.background = "var(--interactive-normal)";
+            };
+            
+            canvasBtn.onclick = (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                this.openCalloutCanvas(callout);
+            };
         }
         
         const content = calloutEl.createEl("div", { cls: "callout-organizer-content" });
@@ -1119,6 +1153,35 @@ class CalloutOrganizerView extends ItemView {
         }
     }
 
+    async openCalloutCanvas(callout: CalloutItem) {
+        try {
+            // Generate callout ID if it doesn't exist
+            if (!callout.calloutID) {
+                const newCalloutID = this.generateCalloutId(callout);
+                callout.calloutID = newCalloutID;
+                
+                try {
+                    // Add the ID to the file
+                    await this.addCalloutIdToCallout(callout, newCalloutID);
+                    // Update cache after successful ID addition
+                    await this.plugin.saveCalloutCache(this.callouts);
+                } catch (error) {
+                    console.error('Error adding callout ID to file:', error);
+                    // Reset the callout ID if we failed to add it to the file
+                    callout.calloutID = undefined;
+                    return;
+                }
+            }
+
+            // Use comprehensive canvas generation with relationship analysis
+            await this.plugin.createCalloutGraphCanvas(callout);
+            
+        } catch (error) {
+            console.error('Error opening callout canvas:', error);
+        }
+    }
+
+
     highlightLine(editor: unknown, lineNumber: number) {
         try {
             // Type guard for editor object
@@ -1337,13 +1400,6 @@ export default class CalloutOrganizerPlugin extends Plugin {
             }
         });
 
-        this.addCommand({
-            id: 'open-callout-graphview',
-            name: 'Open Callout Graphview',
-            callback: () => {
-                this.openCalloutGraphview();
-            }
-        });
 
 
 
@@ -1687,103 +1743,6 @@ export default class CalloutOrganizerPlugin extends Plugin {
         document.head.appendChild(this.styleElement);
     }
 
-    async setupCalloutConnections() {
-        try {
-            // Get all callouts from vault
-            const allCallouts = await this.extractAllCallouts();
-            let calloutsModified = 0;
-            let canvasFilesCreated = 0;
-            
-            // Create the canvas storage folder if it doesn't exist
-            const canvasFolder = this.app.vault.getAbstractFileByPath(this.settings.canvasStorageFolder);
-            if (!canvasFolder) {
-                await this.app.vault.createFolder(this.settings.canvasStorageFolder);
-            }
-            
-            // Process ALL callouts - generate IDs for those without and create canvas for all
-            for (const callout of allCallouts) {
-                // Generate callout ID if it doesn't exist using the same method as drag & drop
-                if (!callout.calloutID) {
-                    const newCalloutID = this.generateCalloutId(callout);
-                    callout.calloutID = newCalloutID;
-                    
-                    try {
-                        // Add the ID to the file using the same method as drag & drop
-                        await this.addCalloutIdToCallout(callout, newCalloutID);
-                        calloutsModified++;
-                    } catch (error) {
-                        console.error('Error adding callout ID to file:', error);
-                        // Reset the callout ID if we failed to add it to the file
-                        callout.calloutID = undefined;
-                        continue; // Skip creating canvas for this callout
-                    }
-                }
-                
-                // Create canvas file for this callout (now all callouts have IDs)
-                await this.createCanvasFileForCallout(callout);
-                canvasFilesCreated++;
-            }
-            
-            // Update cache with new callout IDs (same as drag & drop)
-            if (calloutsModified > 0) {
-                await this.saveCalloutCache(allCallouts);
-            }
-            
-            return {
-                totalCallouts: allCallouts.length,
-                calloutsModified: calloutsModified,
-                canvasFilesCreated: canvasFilesCreated
-            };
-            
-        } catch (error) {
-            console.error('Error setting up callout connections:', error);
-            throw error;
-        }
-    }
-    
-    async createCanvasFileForCallout(callout: CalloutItem) {
-        try {
-            if (!callout.calloutID || !callout.file) return;
-            
-            const sourceFilename = callout.file.split('/').pop()?.replace('.md', '') || 'unknown';
-            const canvasFileName = `callout_${sourceFilename}_${callout.calloutID}.canvas`;
-            const canvasPath = `${this.settings.canvasStorageFolder}/${canvasFileName}`;
-            
-            // Check if canvas file already exists
-            const existingFile = this.app.vault.getAbstractFileByPath(canvasPath);
-            if (existingFile) return; // Don't overwrite existing canvas files
-            
-            // Use the same canvas creation logic as "Open Callout Graphview"
-            const mainNodeId = `node-${Date.now()}-main`;
-            
-            // Use saved dimensions if available, otherwise use defaults
-            const mainNodeWidth = callout.canvasWidth || 400;
-            const mainNodeHeight = callout.canvasHeight || 200;
-            
-            const canvasData = {
-                nodes: [
-                    {
-                        id: mainNodeId,
-                        type: "file",
-                        file: callout.file,
-                        subpath: `#^${callout.calloutID}`,
-                        x: 0,
-                        y: 0,
-                        width: mainNodeWidth,
-                        height: mainNodeHeight,
-                        color: this.getCanvasColorForCallout(callout.type) // Use the correct color method
-                    }
-                ],
-                edges: []
-            };
-            
-            // Create the canvas file
-            await this.app.vault.create(canvasPath, JSON.stringify(canvasData, null, 2));
-            
-        } catch (error) {
-            console.error('Error creating canvas file for callout:', error);
-        }
-    }
 
     generateCalloutId(callout: CalloutItem): string {
         // Generate 6-character random alphanumeric ID in format: type-******
@@ -1936,39 +1895,8 @@ export default class CalloutOrganizerPlugin extends Plugin {
         }
     }
 
-    async openCalloutGraphview() {
-        try {
-            // 获取所有 callouts
-            const cache = await this.loadCalloutCache();
-            const callouts = cache?.callouts || [];
-            
-            if (callouts.length === 0) {
-                new Notice('No callouts found in the vault.');
-                return;
-            }
 
-            // 只显示具有calloutID的callouts
-            const calloutsWithID = callouts.filter(callout => callout.calloutID);
-            
-            if (calloutsWithID.length === 0) {
-                new Notice('No callouts with IDs found. Only callouts with calloutID can open graph view.');
-                return;
-            }
-
-            // 创建callout选择器模态框
-            const modal = new CalloutSelectorModal(this.app, calloutsWithID, async (selectedCallout) => {
-                await this.createCalloutGraphCanvas(selectedCallout);
-            });
-            
-            modal.open();
-            
-        } catch (error) {
-            console.error('Error opening callout graphview:', error);
-            new Notice('Error opening callout graphview. Check console for details.');
-        }
-    }
-
-    private async createCalloutGraphCanvas(selectedCallout: CalloutItem) {
+    async createCalloutGraphCanvas(selectedCallout: CalloutItem) {
         try {
             // Include filename in naming to avoid duplicates
             // Use new naming convention: callout_filename_calloutid.canvas
@@ -2326,20 +2254,15 @@ export default class CalloutOrganizerPlugin extends Plugin {
                 canvasFile = await this.app.vault.create(canvasPath, canvasContent);
                 
                 if (canvasFile) {
-                    const leaf = this.app.workspace.getUnpinnedLeaf();
+                    const leaf = this.app.workspace.getLeaf('tab');
                     await leaf.openFile(canvasFile as any);
-                    new Notice(`Regenerated and opened canvas for callout: ${selectedCallout.title}`);
-                } else {
-                    new Notice('Canvas created but could not be opened automatically.');
                 }
             } catch (error: any) {
                 console.error('Error regenerating canvas:', error);
-                new Notice('Error regenerating canvas. Check console for details.');
             }
             
         } catch (error) {
             console.error('Error creating canvas:', error);
-            new Notice('Error creating canvas. Check console for details.');
         }
     }
 
@@ -4230,47 +4153,9 @@ class CalloutOrganizerSettingTab extends PluginSettingTab {
 
     private addCanvasOptions(containerEl: HTMLElement) {
         // Callout Connections (Beta)
-        containerEl.createEl('h3', {text: 'Callout Connections (Beta)'});
+        containerEl.createEl('h3', {text: 'Canvas Settings'});
         
         const canvasContainer = containerEl.createEl('div', {cls: 'callout-settings-indent'});
-        
-        // Add warning notice
-        const warningEl = canvasContainer.createEl('div', {
-            cls: 'setting-item-description',
-        });
-        warningEl.style.cssText = `
-            background: var(--background-secondary);
-            border: 1px solid var(--background-modifier-border);
-            border-radius: 6px;
-            padding: 12px;
-            margin-bottom: 16px;
-            color: var(--text-normal);
-            font-weight: 500;
-        `;
-        warningEl.textContent = `⚠️ This feature will create IDs for ALL callouts (if missing) and generate canvas files for all callouts in the storage folder.`;
-        
-        new Setting(canvasContainer)
-            .setName('Open Callout Connections')
-            .setDesc('Enable callout connections feature for creating canvas files and managing callout relationships.')
-            .addToggle(toggle => toggle
-                .setValue(this.plugin.settings.enableCalloutConnections)
-                .onChange(async (value) => {
-                    this.plugin.settings.enableCalloutConnections = value;
-                    await this.plugin.saveSettings();
-                    
-                    if (value) {
-                        // Enable callout connections
-                        new Notice('Enabling callout connections...');
-                        try {
-                            const result = await this.plugin.setupCalloutConnections();
-                            new Notice(`Callout connections enabled! Created IDs for ${result.calloutsModified} callouts and ${result.canvasFilesCreated} canvas files.`);
-                        } catch (error) {
-                            new Notice('Error enabling callout connections. Check console for details.');
-                        }
-                    } else {
-                        new Notice('Callout connections disabled.');
-                    }
-                }));
         
 
         new Setting(canvasContainer)
@@ -4286,136 +4171,4 @@ class CalloutOrganizerSettingTab extends PluginSettingTab {
     }
 }
 
-// Callout选择器模态框
-class CalloutSelectorModal extends Modal {
-    private callouts: CalloutItem[];
-    private onSelect: (callout: CalloutItem) => Promise<void>;
-    private filteredCallouts: CalloutItem[];
-    private searchInput: HTMLInputElement;
-    private resultContainer: HTMLElement;
-
-    constructor(app: App, callouts: CalloutItem[], onSelect: (callout: CalloutItem) => Promise<void>) {
-        super(app);
-        this.callouts = callouts;
-        this.filteredCallouts = [...callouts];
-        this.onSelect = onSelect;
-    }
-
-    onOpen() {
-        const { contentEl } = this;
-        contentEl.empty();
-
-        // 标题
-        contentEl.createEl('h2', { text: 'Select a Callout for Graph View' });
-
-        // 搜索框
-        const searchContainer = contentEl.createDiv('callout-selector-search');
-        this.searchInput = searchContainer.createEl('input', {
-            type: 'text',
-            placeholder: 'Search callouts by title, type, or content...'
-        });
-
-        this.searchInput.addEventListener('input', () => this.filterCallouts());
-
-        // 结果容器
-        this.resultContainer = contentEl.createDiv('callout-selector-results');
-
-        // 初始显示所有callouts
-        this.renderResults();
-
-        // 聚焦搜索框
-        this.searchInput.focus();
-    }
-
-    private filterCallouts() {
-        const query = this.searchInput.value.toLowerCase();
-        
-        if (!query) {
-            this.filteredCallouts = [...this.callouts];
-        } else {
-            this.filteredCallouts = this.callouts.filter(callout => 
-                callout.title.toLowerCase().includes(query) ||
-                callout.type.toLowerCase().includes(query) ||
-                callout.content.toLowerCase().includes(query) ||
-                callout.file.toLowerCase().includes(query)
-            );
-        }
-        
-        this.renderResults();
-    }
-
-    private renderResults() {
-        this.resultContainer.empty();
-
-        if (this.filteredCallouts.length === 0) {
-            this.resultContainer.createEl('p', { 
-                text: 'No callouts found matching your search.',
-                cls: 'callout-selector-no-results'
-            });
-            return;
-        }
-
-        // 限制显示数量以提升性能
-        const maxResults = 50;
-        const calloutsToShow = this.filteredCallouts.slice(0, maxResults);
-
-        calloutsToShow.forEach(callout => {
-            const item = this.resultContainer.createDiv('callout-selector-item');
-            
-            // Callout类型标签
-            const _typeTag = item.createEl('span', { 
-                text: callout.type, 
-                cls: 'callout-selector-type-tag' 
-            });
-
-            // Callout标题
-            const _title = item.createEl('div', { 
-                text: callout.title || 'Untitled', 
-                cls: 'callout-selector-title' 
-            });
-
-            // 文件信息
-            const _fileInfo = item.createEl('div', { 
-                text: `📄 ${callout.file}`, 
-                cls: 'callout-selector-file' 
-            });
-
-            // 内容预览
-            if (callout.content) {
-                const _preview = item.createEl('div', { 
-                    text: callout.content.slice(0, 100) + (callout.content.length > 100 ? '...' : ''), 
-                    cls: 'callout-selector-preview' 
-                });
-            }
-
-            // 点击事件
-            item.addEventListener('click', async () => {
-                this.close();
-                await this.onSelect(callout);
-            });
-
-            // 键盘导航支持
-            item.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter') {
-                    e.preventDefault();
-                    item.click();
-                }
-            });
-
-            item.tabIndex = 0;
-        });
-
-        if (this.filteredCallouts.length > maxResults) {
-            this.resultContainer.createEl('p', { 
-                text: `Showing first ${maxResults} of ${this.filteredCallouts.length} results. Use search to narrow down.`,
-                cls: 'callout-selector-more-results'
-            });
-        }
-    }
-
-    onClose() {
-        const { contentEl } = this;
-        contentEl.empty();
-    }
-}
 

@@ -41,7 +41,6 @@ var DEFAULT_SETTINGS = {
   // Cache settings (always enabled)
   // Canvas settings
   canvasStorageFolder: "Callout Connections",
-  enableCalloutConnections: false,
   // Display options - show all by default
   showFilenames: true,
   showH1Headers: true,
@@ -539,6 +538,9 @@ var CalloutOrganizerView = class extends import_obsidian.ItemView {
       }
     };
     const header = calloutEl.createEl("div", { cls: "callout-organizer-header" });
+    header.style.display = "flex";
+    header.style.alignItems = "center";
+    header.style.gap = "8px";
     const displayTitle = callout.title || callout.type.charAt(0).toUpperCase() + callout.type.slice(1);
     if (displayTitle) {
       const titleEl = header.createEl("span", {
@@ -569,6 +571,35 @@ var CalloutOrganizerView = class extends import_obsidian.ItemView {
         titleEl.textContent = displayTitle;
         titleEl.style.color = calloutColor;
       });
+    }
+    {
+      const canvasBtn = header.createEl("button", {
+        cls: "callout-canvas-button",
+        title: "Open in Canvas"
+      });
+      (0, import_obsidian.setIcon)(canvasBtn, "layout-dashboard");
+      canvasBtn.style.marginLeft = "auto";
+      canvasBtn.style.padding = "4px";
+      canvasBtn.style.border = "none";
+      canvasBtn.style.background = "var(--interactive-normal)";
+      canvasBtn.style.borderRadius = "4px";
+      canvasBtn.style.cursor = "pointer";
+      canvasBtn.style.display = "flex";
+      canvasBtn.style.alignItems = "center";
+      canvasBtn.style.justifyContent = "center";
+      canvasBtn.style.width = "24px";
+      canvasBtn.style.height = "24px";
+      canvasBtn.onmouseover = () => {
+        canvasBtn.style.background = "var(--interactive-hover)";
+      };
+      canvasBtn.onmouseleave = () => {
+        canvasBtn.style.background = "var(--interactive-normal)";
+      };
+      canvasBtn.onclick = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.openCalloutCanvas(callout);
+      };
     }
     const content = calloutEl.createEl("div", { cls: "callout-organizer-content" });
     import_obsidian.MarkdownRenderer.render(this.app, callout.content, content, callout.file, this.component).then(() => {
@@ -780,6 +811,25 @@ var CalloutOrganizerView = class extends import_obsidian.ItemView {
       }
     }
   }
+  async openCalloutCanvas(callout) {
+    try {
+      if (!callout.calloutID) {
+        const newCalloutID = this.generateCalloutId(callout);
+        callout.calloutID = newCalloutID;
+        try {
+          await this.addCalloutIdToCallout(callout, newCalloutID);
+          await this.plugin.saveCalloutCache(this.callouts);
+        } catch (error) {
+          console.error("Error adding callout ID to file:", error);
+          callout.calloutID = void 0;
+          return;
+        }
+      }
+      await this.plugin.createCalloutGraphCanvas(callout);
+    } catch (error) {
+      console.error("Error opening callout canvas:", error);
+    }
+  }
   highlightLine(editor, lineNumber) {
     try {
       if (!editor || typeof editor !== "object" || !("lineInfo" in editor)) {
@@ -939,13 +989,6 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
       name: "Open Callout Organizer",
       callback: () => {
         this.activateCalloutOrganizer();
-      }
-    });
-    this.addCommand({
-      id: "open-callout-graphview",
-      name: "Open Callout Graphview",
-      callback: () => {
-        this.openCalloutGraphview();
       }
     });
     this.addSettingTab(new CalloutOrganizerSettingTab(this.app, this));
@@ -1281,80 +1324,6 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
     this.styleElement.textContent = css;
     document.head.appendChild(this.styleElement);
   }
-  async setupCalloutConnections() {
-    try {
-      const allCallouts = await this.extractAllCallouts();
-      let calloutsModified = 0;
-      let canvasFilesCreated = 0;
-      const canvasFolder = this.app.vault.getAbstractFileByPath(this.settings.canvasStorageFolder);
-      if (!canvasFolder) {
-        await this.app.vault.createFolder(this.settings.canvasStorageFolder);
-      }
-      for (const callout of allCallouts) {
-        if (!callout.calloutID) {
-          const newCalloutID = this.generateCalloutId(callout);
-          callout.calloutID = newCalloutID;
-          try {
-            await this.addCalloutIdToCallout(callout, newCalloutID);
-            calloutsModified++;
-          } catch (error) {
-            console.error("Error adding callout ID to file:", error);
-            callout.calloutID = void 0;
-            continue;
-          }
-        }
-        await this.createCanvasFileForCallout(callout);
-        canvasFilesCreated++;
-      }
-      if (calloutsModified > 0) {
-        await this.saveCalloutCache(allCallouts);
-      }
-      return {
-        totalCallouts: allCallouts.length,
-        calloutsModified,
-        canvasFilesCreated
-      };
-    } catch (error) {
-      console.error("Error setting up callout connections:", error);
-      throw error;
-    }
-  }
-  async createCanvasFileForCallout(callout) {
-    var _a;
-    try {
-      if (!callout.calloutID || !callout.file)
-        return;
-      const sourceFilename = ((_a = callout.file.split("/").pop()) == null ? void 0 : _a.replace(".md", "")) || "unknown";
-      const canvasFileName = `callout_${sourceFilename}_${callout.calloutID}.canvas`;
-      const canvasPath = `${this.settings.canvasStorageFolder}/${canvasFileName}`;
-      const existingFile = this.app.vault.getAbstractFileByPath(canvasPath);
-      if (existingFile)
-        return;
-      const mainNodeId = `node-${Date.now()}-main`;
-      const mainNodeWidth = callout.canvasWidth || 400;
-      const mainNodeHeight = callout.canvasHeight || 200;
-      const canvasData = {
-        nodes: [
-          {
-            id: mainNodeId,
-            type: "file",
-            file: callout.file,
-            subpath: `#^${callout.calloutID}`,
-            x: 0,
-            y: 0,
-            width: mainNodeWidth,
-            height: mainNodeHeight,
-            color: this.getCanvasColorForCallout(callout.type)
-            // Use the correct color method
-          }
-        ],
-        edges: []
-      };
-      await this.app.vault.create(canvasPath, JSON.stringify(canvasData, null, 2));
-    } catch (error) {
-      console.error("Error creating canvas file for callout:", error);
-    }
-  }
   generateCalloutId(callout) {
     const type = callout.type.toLowerCase();
     const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
@@ -1461,28 +1430,6 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
     const leaves = this.app.workspace.getLeavesOfType(VIEW_TYPE_CALLOUT_ORGANIZER);
     if (leaves.length > 0) {
       this.app.workspace.revealLeaf(leaves[0]);
-    }
-  }
-  async openCalloutGraphview() {
-    try {
-      const cache = await this.loadCalloutCache();
-      const callouts = (cache == null ? void 0 : cache.callouts) || [];
-      if (callouts.length === 0) {
-        new import_obsidian.Notice("No callouts found in the vault.");
-        return;
-      }
-      const calloutsWithID = callouts.filter((callout) => callout.calloutID);
-      if (calloutsWithID.length === 0) {
-        new import_obsidian.Notice("No callouts with IDs found. Only callouts with calloutID can open graph view.");
-        return;
-      }
-      const modal = new CalloutSelectorModal(this.app, calloutsWithID, async (selectedCallout) => {
-        await this.createCalloutGraphCanvas(selectedCallout);
-      });
-      modal.open();
-    } catch (error) {
-      console.error("Error opening callout graphview:", error);
-      new import_obsidian.Notice("Error opening callout graphview. Check console for details.");
     }
   }
   async createCalloutGraphCanvas(selectedCallout) {
@@ -1747,19 +1694,14 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
         const canvasContent = JSON.stringify(canvasData, null, "	");
         canvasFile = await this.app.vault.create(canvasPath, canvasContent);
         if (canvasFile) {
-          const leaf = this.app.workspace.getUnpinnedLeaf();
+          const leaf = this.app.workspace.getLeaf("tab");
           await leaf.openFile(canvasFile);
-          new import_obsidian.Notice(`Regenerated and opened canvas for callout: ${selectedCallout.title}`);
-        } else {
-          new import_obsidian.Notice("Canvas created but could not be opened automatically.");
         }
       } catch (error) {
         console.error("Error regenerating canvas:", error);
-        new import_obsidian.Notice("Error regenerating canvas. Check console for details.");
       }
     } catch (error) {
       console.error("Error creating canvas:", error);
-      new import_obsidian.Notice("Error creating canvas. Check console for details.");
     }
   }
   /**
@@ -3168,126 +3110,11 @@ var CalloutOrganizerSettingTab = class extends import_obsidian.PluginSettingTab 
     return this.plugin.getDefaultIconForCalloutType(type);
   }
   addCanvasOptions(containerEl) {
-    containerEl.createEl("h3", { text: "Callout Connections (Beta)" });
+    containerEl.createEl("h3", { text: "Canvas Settings" });
     const canvasContainer = containerEl.createEl("div", { cls: "callout-settings-indent" });
-    const warningEl = canvasContainer.createEl("div", {
-      cls: "setting-item-description"
-    });
-    warningEl.style.cssText = `
-            background: var(--background-secondary);
-            border: 1px solid var(--background-modifier-border);
-            border-radius: 6px;
-            padding: 12px;
-            margin-bottom: 16px;
-            color: var(--text-normal);
-            font-weight: 500;
-        `;
-    warningEl.textContent = `\u26A0\uFE0F This feature will create IDs for ALL callouts (if missing) and generate canvas files for all callouts in the storage folder.`;
-    new import_obsidian.Setting(canvasContainer).setName("Open Callout Connections").setDesc("Enable callout connections feature for creating canvas files and managing callout relationships.").addToggle((toggle) => toggle.setValue(this.plugin.settings.enableCalloutConnections).onChange(async (value) => {
-      this.plugin.settings.enableCalloutConnections = value;
-      await this.plugin.saveSettings();
-      if (value) {
-        new import_obsidian.Notice("Enabling callout connections...");
-        try {
-          const result = await this.plugin.setupCalloutConnections();
-          new import_obsidian.Notice(`Callout connections enabled! Created IDs for ${result.calloutsModified} callouts and ${result.canvasFilesCreated} canvas files.`);
-        } catch (error) {
-          new import_obsidian.Notice("Error enabling callout connections. Check console for details.");
-        }
-      } else {
-        new import_obsidian.Notice("Callout connections disabled.");
-      }
-    }));
     new import_obsidian.Setting(canvasContainer).setName("Canvas Storage Folder").setDesc("Folder where callout canvas files will be stored (relative to vault root)").addText((text) => text.setPlaceholder("Callout Connections").setValue(this.plugin.settings.canvasStorageFolder).onChange(async (value) => {
       this.plugin.settings.canvasStorageFolder = value || "Callout Connections";
       await this.plugin.saveSettings();
     }));
-  }
-};
-var CalloutSelectorModal = class extends import_obsidian.Modal {
-  constructor(app, callouts, onSelect) {
-    super(app);
-    this.callouts = callouts;
-    this.filteredCallouts = [...callouts];
-    this.onSelect = onSelect;
-  }
-  onOpen() {
-    const { contentEl } = this;
-    contentEl.empty();
-    contentEl.createEl("h2", { text: "Select a Callout for Graph View" });
-    const searchContainer = contentEl.createDiv("callout-selector-search");
-    this.searchInput = searchContainer.createEl("input", {
-      type: "text",
-      placeholder: "Search callouts by title, type, or content..."
-    });
-    this.searchInput.addEventListener("input", () => this.filterCallouts());
-    this.resultContainer = contentEl.createDiv("callout-selector-results");
-    this.renderResults();
-    this.searchInput.focus();
-  }
-  filterCallouts() {
-    const query = this.searchInput.value.toLowerCase();
-    if (!query) {
-      this.filteredCallouts = [...this.callouts];
-    } else {
-      this.filteredCallouts = this.callouts.filter(
-        (callout) => callout.title.toLowerCase().includes(query) || callout.type.toLowerCase().includes(query) || callout.content.toLowerCase().includes(query) || callout.file.toLowerCase().includes(query)
-      );
-    }
-    this.renderResults();
-  }
-  renderResults() {
-    this.resultContainer.empty();
-    if (this.filteredCallouts.length === 0) {
-      this.resultContainer.createEl("p", {
-        text: "No callouts found matching your search.",
-        cls: "callout-selector-no-results"
-      });
-      return;
-    }
-    const maxResults = 50;
-    const calloutsToShow = this.filteredCallouts.slice(0, maxResults);
-    calloutsToShow.forEach((callout) => {
-      const item = this.resultContainer.createDiv("callout-selector-item");
-      const _typeTag = item.createEl("span", {
-        text: callout.type,
-        cls: "callout-selector-type-tag"
-      });
-      const _title = item.createEl("div", {
-        text: callout.title || "Untitled",
-        cls: "callout-selector-title"
-      });
-      const _fileInfo = item.createEl("div", {
-        text: `\u{1F4C4} ${callout.file}`,
-        cls: "callout-selector-file"
-      });
-      if (callout.content) {
-        const _preview = item.createEl("div", {
-          text: callout.content.slice(0, 100) + (callout.content.length > 100 ? "..." : ""),
-          cls: "callout-selector-preview"
-        });
-      }
-      item.addEventListener("click", async () => {
-        this.close();
-        await this.onSelect(callout);
-      });
-      item.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") {
-          e.preventDefault();
-          item.click();
-        }
-      });
-      item.tabIndex = 0;
-    });
-    if (this.filteredCallouts.length > maxResults) {
-      this.resultContainer.createEl("p", {
-        text: `Showing first ${maxResults} of ${this.filteredCallouts.length} results. Use search to narrow down.`,
-        cls: "callout-selector-more-results"
-      });
-    }
-  }
-  onClose() {
-    const { contentEl } = this;
-    contentEl.empty();
   }
 };

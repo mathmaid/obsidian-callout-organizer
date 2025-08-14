@@ -48,6 +48,24 @@
     flex-shrink: 0;
 }
 
+/* Canvas button styling */
+.callout-canvas-button {
+    opacity: 0.7;
+    transition: opacity 0.2s ease, background-color 0.2s ease;
+}
+
+.callout-canvas-button:hover {
+    opacity: 1;
+}
+
+.callout-organizer-header {
+    position: relative;
+}
+
+.callout-organizer-item:hover .callout-canvas-button {
+    opacity: 1;
+}
+
 .callout-container {
     margin-top: 8px;
 }

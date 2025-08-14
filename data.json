@@ -7,8 +7,6 @@
   "searchInCalloutContent": true,
   "maxSearchResults": 50,
   "canvasStorageFolder": "Callout Connections",
-  "enableCalloutConnections": true,
-  "betterCanvasEmbeddings": true,
   "showFilenames": true,
   "showH1Headers": true,
   "showH2Headers": true,
@@ -389,6 +387,8 @@
       "icon": "pencil"
     }
   },
+  "enableCalloutConnections": true,
+  "betterCanvasEmbeddings": true,
   "graphConnectionDepth": 3,
   "enableFileCache": true,
   "disabledRelationships": [],

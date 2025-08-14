@@ -1,117 +1,8 @@
 {
   "version": "1.4",
-  "timestamp": 1755148298633,
+  "timestamp": 1755152027981,
   "vaultPath": "测试仓库",
   "callouts": [
-    {
-      "file": "Custom Callouts.md",
-      "type": "definition",
-      "title": "Definition Title",
-      "content": "This is a definition callout for testing.",
-      "lineNumber": 3,
-      "fileModTime": "2025-08-14 13:11:36",
-      "calloutCreatedTime": "2025-08-14 13:11:36",
-      "calloutModifyTime": "2025-08-14 13:11:36",
-      "outlinks": []
-    },
-    {
-      "file": "Custom Callouts.md",
-      "type": "theorem",
-      "title": "Pythagorean Theorem",
-      "content": "In a right triangle, the square of the hypotenuse equals the sum of squares of the other two sides.",
-      "lineNumber": 7,
-      "fileModTime": "2025-08-14 13:11:36",
-      "calloutCreatedTime": "2025-08-14 13:08:10",
-      "calloutModifyTime": "2025-08-14 13:08:10",
-      "outlinks": [],
-      "calloutID": "theorem-ywi0y1",
-      "canvasWidth": 400,
-      "canvasHeight": 200
-    },
-    {
-      "file": "Custom Callouts.md",
-      "type": "lemma",
-      "title": "Helper Lemma",
-      "content": "This is a supporting lemma.",
-      "lineNumber": 11,
-      "fileModTime": "2025-08-14 13:11:36",
-      "calloutCreatedTime": "2025-08-14 13:08:10",
-      "calloutModifyTime": "2025-08-14 13:08:10",
-      "outlinks": [],
-      "calloutID": "lemma-0rgfq9",
-      "canvasWidth": 400,
-      "canvasHeight": 200
-    },
-    {
-      "file": "Custom Callouts.md",
-      "type": "proposition",
-      "title": "Test Proposition",
-      "content": "This is a test proposition.",
-      "lineNumber": 15,
-      "fileModTime": "2025-08-14 13:11:36",
-      "calloutCreatedTime": "2025-08-14 13:08:10",
-      "calloutModifyTime": "2025-08-14 13:08:10",
-      "outlinks": [],
-      "calloutID": "proposition-zenbmd",
-      "canvasWidth": 400,
-      "canvasHeight": 200
-    },
-    {
-      "file": "Custom Callouts.md",
-      "type": "corollary",
-      "title": "Important Corollary",
-      "content": "This follows from the theorem.",
-      "lineNumber": 19,
-      "fileModTime": "2025-08-14 13:11:36",
-      "calloutCreatedTime": "2025-08-14 13:08:10",
-      "calloutModifyTime": "2025-08-14 13:08:10",
-      "outlinks": [],
-      "calloutID": "corollary-cshoff",
-      "canvasWidth": 400,
-      "canvasHeight": 200
-    },
-    {
-      "file": "Custom Callouts.md",
-      "type": "exercise",
-      "title": "Practice Problem",
-      "content": "Solve this exercise.",
-      "lineNumber": 23,
-      "fileModTime": "2025-08-14 13:11:36",
-      "calloutCreatedTime": "2025-08-14 13:08:10",
-      "calloutModifyTime": "2025-08-14 13:08:10",
-      "outlinks": [],
-      "calloutID": "exercise-qx9we7",
-      "canvasWidth": 400,
-      "canvasHeight": 200
-    },
-    {
-      "file": "Custom Callouts.md",
-      "type": "conjecture",
-      "title": "Goldbach Conjecture",
-      "content": "Every even integer greater than 2 is the sum of two primes.",
-      "lineNumber": 27,
-      "fileModTime": "2025-08-14 13:11:36",
-      "calloutCreatedTime": "2025-08-14 13:08:10",
-      "calloutModifyTime": "2025-08-14 13:08:10",
-      "outlinks": [],
-      "calloutID": "conjecture-9wz0lx",
-      "canvasWidth": 400,
-      "canvasHeight": 200
-    },
-    {
-      "file": "Custom Callouts.md",
-      "type": "remark",
-      "title": "Important Note",
-      "content": "This is just a remark for testing purposes.",
-      "lineNumber": 31,
-      "fileModTime": "2025-08-14 13:11:36",
-      "calloutCreatedTime": "2025-08-14 13:08:10",
-      "calloutModifyTime": "2025-08-14 13:08:10",
-      "outlinks": [],
-      "calloutID": "remark-ll55a0",
-      "canvasWidth": 400,
-      "canvasHeight": 200
-    },
     {
       "file": "Obsidian Built-in Callouts.md",
       "type": "note",
@@ -489,25 +380,144 @@
       "calloutID": "cite-gc307e",
       "canvasWidth": 400,
       "canvasHeight": 200
+    },
+    {
+      "file": "Custom Callouts.md",
+      "type": "definition",
+      "title": "Definition Title",
+      "content": "This is a definition callout for testing.",
+      "lineNumber": 4,
+      "fileModTime": "2025-08-14 13:56:06",
+      "calloutCreatedTime": "2025-08-14 13:11:36",
+      "calloutModifyTime": "2025-08-14 13:11:36",
+      "outlinks": [
+        [
+          "Custom Callouts.md",
+          "lemma-0rgfq9",
+          "cite"
+        ]
+      ],
+      "calloutID": "definition-x2tsmr",
+      "canvasWidth": 444,
+      "canvasHeight": 175
+    },
+    {
+      "file": "Custom Callouts.md",
+      "type": "theorem",
+      "title": "Pythagorean Theorem",
+      "content": "In a right triangle, the square of the hypotenuse equals the sum of squares of the other two sides.",
+      "lineNumber": 8,
+      "fileModTime": "2025-08-14 13:56:06",
+      "calloutCreatedTime": "2025-08-14 13:08:10",
+      "calloutModifyTime": "2025-08-14 13:08:10",
+      "outlinks": [],
+      "calloutID": "theorem-ywi0y1",
+      "canvasWidth": 457,
+      "canvasHeight": 199
+    },
+    {
+      "file": "Custom Callouts.md",
+      "type": "lemma",
+      "title": "Helper Lemma",
+      "content": "This is a supporting lemma.",
+      "lineNumber": 12,
+      "fileModTime": "2025-08-14 13:56:06",
+      "calloutCreatedTime": "2025-08-14 13:08:10",
+      "calloutModifyTime": "2025-08-14 13:08:10",
+      "outlinks": [],
+      "calloutID": "lemma-0rgfq9",
+      "canvasWidth": 325,
+      "canvasHeight": 155
+    },
+    {
+      "file": "Custom Callouts.md",
+      "type": "proposition",
+      "title": "Test Proposition",
+      "content": "This is a test proposition.",
+      "lineNumber": 16,
+      "fileModTime": "2025-08-14 13:56:06",
+      "calloutCreatedTime": "2025-08-14 13:08:10",
+      "calloutModifyTime": "2025-08-14 13:08:10",
+      "outlinks": [
+        [
+          "Custom Callouts.md",
+          "exercise-qx9we7"
+        ],
+        [
+          "Custom Callouts.md",
+          "lemma-0rgfq9"
+        ]
+      ],
+      "calloutID": "proposition-zenbmd",
+      "canvasWidth": 304,
+      "canvasHeight": 162
+    },
+    {
+      "file": "Custom Callouts.md",
+      "type": "corollary",
+      "title": "Important Corollary",
+      "content": "This follows from the theorem.",
+      "lineNumber": 20,
+      "fileModTime": "2025-08-14 13:56:06",
+      "calloutCreatedTime": "2025-08-14 13:08:10",
+      "calloutModifyTime": "2025-08-14 13:08:10",
+      "outlinks": [],
+      "calloutID": "corollary-cshoff",
+      "canvasWidth": 400,
+      "canvasHeight": 200
+    },
+    {
+      "file": "Custom Callouts.md",
+      "type": "exercise",
+      "title": "Practice Problem",
+      "content": "Solve this exercise.",
+      "lineNumber": 24,
+      "fileModTime": "2025-08-14 13:56:06",
+      "calloutCreatedTime": "2025-08-14 13:08:10",
+      "calloutModifyTime": "2025-08-14 13:08:10",
+      "outlinks": [],
+      "calloutID": "exercise-qx9we7",
+      "canvasWidth": 400,
+      "canvasHeight": 200
+    },
+    {
+      "file": "Custom Callouts.md",
+      "type": "conjecture",
+      "title": "Goldbach Conjecture",
+      "content": "Every even integer greater than 2 is the sum of two primes.",
+      "lineNumber": 28,
+      "fileModTime": "2025-08-14 13:56:06",
+      "calloutCreatedTime": "2025-08-14 13:08:10",
+      "calloutModifyTime": "2025-08-14 13:08:10",
+      "outlinks": [],
+      "calloutID": "conjecture-9wz0lx",
+      "canvasWidth": 444,
+      "canvasHeight": 203
+    },
+    {
+      "file": "Custom Callouts.md",
+      "type": "remark",
+      "title": "Important Note",
+      "content": "This is just a remark for testing purposes.",
+      "lineNumber": 32,
+      "fileModTime": "2025-08-14 13:56:06",
+      "calloutCreatedTime": "2025-08-14 13:08:10",
+      "calloutModifyTime": "2025-08-14 13:08:10",
+      "outlinks": [],
+      "calloutID": "remark-ll55a0",
+      "canvasWidth": 400,
+      "canvasHeight": 200
     }
   ],
   "fileModTimes": {
     "writing-ide-server/README.md": "2025-08-11 19:41:48",
-    "Tasks.md": "2025-08-14 13:10:49",
-    "Plugin Maintenance Guide.md": "2025-08-14 12:02:55",
+    "Tasks.md": "2025-08-14 13:13:33",
+    "Plugin Maintenance Guide.md": "2025-08-14 13:31:03",
     "Obsidian Built-in Callouts.md": "2025-08-14 13:06:47",
-    "Custom Callouts.md": "2025-08-14 13:11:36",
-    "CLAUDE.md": "2025-08-14 10:55:28"
+    "Custom Callouts.md": "2025-08-14 13:56:06",
+    "CLAUDE.md": "2025-08-14 13:55:59"
   },
   "calloutCreationTimes": {
-    "Custom Callouts.md:3:definition:Definition Title": "2025-08-14 13:11:36",
-    "Custom Callouts.md:theorem-ywi0y1": "2025-08-14 13:08:10",
-    "Custom Callouts.md:lemma-0rgfq9": "2025-08-14 13:08:10",
-    "Custom Callouts.md:proposition-zenbmd": "2025-08-14 13:08:10",
-    "Custom Callouts.md:corollary-cshoff": "2025-08-14 13:08:10",
-    "Custom Callouts.md:exercise-qx9we7": "2025-08-14 13:08:10",
-    "Custom Callouts.md:conjecture-9wz0lx": "2025-08-14 13:08:10",
-    "Custom Callouts.md:remark-ll55a0": "2025-08-14 13:08:10",
     "Obsidian Built-in Callouts.md:note-q3ar72": "2025-08-14 13:06:32",
     "Obsidian Built-in Callouts.md:abstract-m77djq": "2025-08-14 13:06:32",
     "Obsidian Built-in Callouts.md:summary-e1b7v4": "2025-08-14 13:06:32",
@@ -534,6 +544,14 @@
     "Obsidian Built-in Callouts.md:bug-pxednm": "2025-08-14 13:06:32",
     "Obsidian Built-in Callouts.md:example-ooyszf": "2025-08-14 13:06:32",
     "Obsidian Built-in Callouts.md:quote-pchn1n": "2025-08-14 13:06:32",
-    "Obsidian Built-in Callouts.md:cite-gc307e": "2025-08-14 13:06:32"
+    "Obsidian Built-in Callouts.md:cite-gc307e": "2025-08-14 13:06:32",
+    "Custom Callouts.md:definition-x2tsmr": "2025-08-14 13:11:36",
+    "Custom Callouts.md:theorem-ywi0y1": "2025-08-14 13:08:10",
+    "Custom Callouts.md:lemma-0rgfq9": "2025-08-14 13:08:10",
+    "Custom Callouts.md:proposition-zenbmd": "2025-08-14 13:08:10",
+    "Custom Callouts.md:corollary-cshoff": "2025-08-14 13:08:10",
+    "Custom Callouts.md:exercise-qx9we7": "2025-08-14 13:08:10",
+    "Custom Callouts.md:conjecture-9wz0lx": "2025-08-14 13:08:10",
+    "Custom Callouts.md:remark-ll55a0": "2025-08-14 13:08:10"
   }
 }
