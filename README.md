@@ -184,6 +184,38 @@ MIT License - see LICENSE file for details
 
 ## Changelog
 
+### Version 1.5.0
+- 🎯 **Major Canvas Enhancement & Bug Fixes**:
+  - **Edge Label Preservation**: Canvas edge labels are now preserved and restored across canvas regenerations
+  - **Node Dimension Preservation**: Canvas node width/height are maintained across updates for consistent layouts
+  - **Cross-Canvas Consistency**: Edge labels and node dimensions remain consistent across all canvas files
+  - **Dual-Node Processing**: Fixed critical issue where callouts with both file and text nodes only processed one type
+- 🎨 **Advanced Arrow Pattern System**:
+  - **Circular Bidirectional Arrows**: Redesigned bidirectional connection visual pattern for enhanced clarity
+    - Forward edges: right-to-right side connections (A→B)
+    - Reverse edges: left-to-left side connections (B→A)
+    - Creates elegant circular arrow patterns for bidirectional relationships
+  - **Self-Connection Filtering**: Removed meaningless self-referential edges
+    - Callouts linking to themselves no longer create canvas edges
+    - Cleaner, more meaningful canvas visualizations
+    - Improved navigation clarity and reduced visual clutter
+- ⚡ **Performance & Stability Improvements**:
+  - **ResizeObserver Error Fix**: Eliminated repetitive "ResizeObserver loop completed" console errors
+    - Replaced nested setTimeout with requestAnimationFrame for better browser synchronization
+    - Added global error suppression for cleaner console output
+  - **Enhanced Canvas Analysis**: Improved canvas edge parsing and relationship detection accuracy
+  - **Optimized Edge Creation**: More efficient bidirectional edge generation logic
+- 🔧 **Technical Enhancements**:
+  - **Global Edge Label System**: Implemented cross-canvas label consistency mechanism
+  - **Node Dimension Tracking**: Added `canvasWidth` and `canvasHeight` fields to CalloutItem interface
+  - **Improved Edge Processing**: Enhanced dual-node edge collection for complete relationship mapping
+  - **Better Build Process**: Streamlined TypeScript compilation and plugin building workflow
+- 🚀 **User Experience Improvements**:
+  - **Cleaner Canvas Visualizations**: Removed clutter from self-referential connections
+  - **Consistent Visual Patterns**: Standardized arrow directions for better relationship understanding
+  - **Preserved User Customizations**: Canvas modifications (labels, sizes) persist across refreshes
+  - **Enhanced Navigation**: More intuitive connection patterns for complex relationship maps
+
 ### Version 1.4.0
 - 🎯 **Major Canvas Connection Enhancement**:
   - **Canvas-Based Connection Detection**: Completely redesigned connection detection to use canvas edges instead of text-based links
