@@ -417,14 +417,15 @@ class CalloutOrganizerView extends ItemView {
         });
         setIcon(refreshBtn, "refresh-cw");
         
-        refreshBtn.onclick = async () => {
+        refreshBtn.onmousedown = async (e) => {
+            e.preventDefault(); // Prevent focus issues
             if (this.searchMode === 'search') {
                 // Force refresh by rescanning all files and updating cache
                 await this.plugin.refreshAllCallouts();
                 
                 // Then load from JSON file (not memory)
                 await this.refreshCallouts();
-                console.log('Callouts refreshed and saved to JSON file!');
+                // Callouts refreshed and saved
                 
             } else {
                 // For current file mode, refresh and also rebuild cache
@@ -434,7 +435,7 @@ class CalloutOrganizerView extends ItemView {
                 
                 // Then refresh current file view
                 await this.refreshCallouts();
-                console.log('Current file callouts refreshed! Cache updated.');
+                // Current file callouts refreshed
             }
         };
         
@@ -468,7 +469,8 @@ class CalloutOrganizerView extends ItemView {
                 cls: "callout-clear-all-button"
             });
             
-            toggleButton.onclick = (e) => {
+            toggleButton.onmousedown = (e) => {
+                e.preventDefault(); // Prevent focus issues
                 e.stopPropagation();
                 const currentlyAllSelected = this.activeFilters.size === uniqueTypes.length;
                 
@@ -534,7 +536,8 @@ class CalloutOrganizerView extends ItemView {
                 button.addClass("active");
             }
             
-            button.onclick = (e) => {
+            button.onmousedown = (e) => {
+                e.preventDefault(); // Prevent focus issues
                 e.stopPropagation();
                 if (this.activeFilters.has(type)) {
                     this.activeFilters.delete(type);
@@ -746,13 +749,15 @@ class CalloutOrganizerView extends ItemView {
                 // Add visual feedback during drag
                 calloutEl.style.opacity = '0.5';
                 
-                // Queue callout ID addition without blocking UI
+                // TEMPORARILY DISABLED: Queue callout ID addition without blocking UI
+                // This was causing infinite loop when dragging callouts
                 if (needsNewId && calloutID) {
-                    queueMicrotask(() => {
-                        this.addCalloutIdToCallout(callout, calloutID!).catch(error => {
-                            console.error('Error adding callout ID to file:', error);
-                        });
-                    });
+                    // Would add callout ID (functionality temporarily disabled)
+                    // queueMicrotask(() => {
+                    //     this.addCalloutIdToCallout(callout, calloutID!).catch(error => {
+                    //         console.error('Error adding callout ID to file:', error);
+                    //     });
+                    // });
                 }
             }
         };
@@ -807,6 +812,11 @@ class CalloutOrganizerView extends ItemView {
                 this.processMathForElement(titleEl);
                 // Reapply color after markdown rendering
                 titleEl.style.color = calloutColor;
+            }).catch((error) => {
+                console.warn('Failed to render callout title:', error);
+                // Fallback to plain text
+                titleEl.textContent = displayTitle;
+                titleEl.style.color = calloutColor;
             });
         }
         
@@ -816,6 +826,10 @@ class CalloutOrganizerView extends ItemView {
         MarkdownRenderer.render(this.app, callout.content, content, callout.file, this.component).then(() => {
             // Process math after MarkdownRenderer has completed
             this.processMathForElement(content);
+        }).catch((error) => {
+            console.warn('Failed to render callout content:', error);
+            // Fallback to plain text
+            content.textContent = callout.content;
         });
         
         // Build hierarchical breadcrumb (moved to bottom)
@@ -1169,6 +1183,7 @@ class CalloutOrganizerView extends ItemView {
         const delay = this.callouts.length > 100 ? this.SEARCH_DEBOUNCE_DELAY * 2 : this.SEARCH_DEBOUNCE_DELAY;
         
         this.searchDebounceTimer = setTimeout(() => {
+            this.searchDebounceTimer = null;
             const calloutContainer = this.calloutContainerElement || this.containerEl.querySelector('.callout-container') as HTMLElement;
             if (calloutContainer) {
                 this.renderCalloutsList(calloutContainer);
@@ -1256,16 +1271,43 @@ export default class CalloutOrganizerPlugin extends Plugin {
     static readonly CONTENT_EXTRACT_REGEX = /^>\s?/;
     
     // Cache constants
-    static readonly CACHE_VERSION = "1.3";
+    static readonly CACHE_VERSION = "1.4";
     static readonly PLUGIN_FOLDER = "callout-organizer";
     static readonly CACHE_FILENAME = "callouts.json";
     
     settings: CalloutOrganizerSettings;
     private cacheOperationLock: Promise<any> | null = null;
     private styleElement: HTMLStyleElement | null = null;
+    private originalErrorHandler: OnErrorEventHandler | null = null;
+
+    /**
+     * Setup ResizeObserver error handler to suppress loop warnings
+     */
+    private setupResizeObserverErrorHandler() {
+        // Store the original error handler
+        this.originalErrorHandler = window.onerror;
+        
+        window.onerror = (message, source, lineno, colno, error) => {
+            // Suppress ResizeObserver loop errors as they're usually harmless
+            if (typeof message === 'string' && 
+                message.includes('ResizeObserver loop completed with undelivered notifications')) {
+                return true; // Prevent the error from being logged
+            }
+            
+            // Call the original handler for other errors
+            if (this.originalErrorHandler) {
+                return this.originalErrorHandler(message, source, lineno, colno, error);
+            }
+            
+            return false;
+        };
+    }
 
     async onload() {
         await this.loadSettings();
+
+        // Add ResizeObserver error handler to suppress loop warnings
+        this.setupResizeObserverErrorHandler();
 
         this.registerView(
             VIEW_TYPE_CALLOUT_ORGANIZER,
@@ -1640,7 +1682,7 @@ export default class CalloutOrganizerPlugin extends Plugin {
     async activateCalloutOrganizer() {
         this.app.workspace.detachLeavesOfType(VIEW_TYPE_CALLOUT_ORGANIZER);
 
-        const rightLeaf = this.app.workspace.getRightLeaf(false);
+        const rightLeaf = this.app.workspace.getLeaf('split', 'vertical');
         if (rightLeaf) {
             await rightLeaf.setViewState({
                 type: VIEW_TYPE_CALLOUT_ORGANIZER,
@@ -1695,8 +1737,9 @@ export default class CalloutOrganizerPlugin extends Plugin {
     private async createCalloutGraphCanvas(selectedCallout: CalloutItem) {
         try {
             // Include filename in naming to avoid duplicates
+            // Use new naming convention: callout_filename_calloutid.canvas
             const sourceFilename = selectedCallout.file?.split('/').pop()?.replace('.md', '') || 'unknown';
-            const canvasFileName = `callout-${sourceFilename}-${selectedCallout.calloutID || Date.now()}.canvas`;
+            const canvasFileName = `callout_${sourceFilename}_${selectedCallout.calloutID || Date.now()}.canvas`;
             const canvasPath = `${this.settings.canvasStorageFolder}/${canvasFileName}`;
             
             // Ensure canvas storage folder exists
@@ -1732,7 +1775,7 @@ export default class CalloutOrganizerPlugin extends Plugin {
             
             // Helper function to get callout key
             const getCalloutKey = (callout: CalloutItem) => `${callout.file}:${callout.calloutID}`;
-            const mainCalloutKey = getCalloutKey(selectedCallout);
+            const _mainCalloutKey = getCalloutKey(selectedCallout);
             
             // 创建callout映射
             const calloutMap = new Map<string, CalloutItem>();
@@ -1957,7 +2000,7 @@ export default class CalloutOrganizerPlugin extends Plugin {
                 if (canvasFile) {
                     // 文件已存在，删除旧文件
                     await this.app.vault.delete(canvasFile);
-                    console.log(`Deleted existing canvas file: ${canvasPath}`);
+                    // Deleted existing canvas file
                 }
                 
                 // 创建新的canvas文件 (使用Obsidian标准格式)
@@ -2005,8 +2048,9 @@ export default class CalloutOrganizerPlugin extends Plugin {
         const getCalloutKey = (callout: CalloutItem) => `${callout.file}:${callout.calloutID}`;
         
         // 查找包含选定callout的canvas文件
+        // Use new naming convention: callout_filename_calloutid.canvas
         const sourceFilename = selectedCallout.file?.split('/').pop()?.replace('.md', '') || 'unknown';
-        const canvasFileName = `callout-${sourceFilename}-${selectedCallout.calloutID || 'center'}.canvas`;
+        const canvasFileName = `callout_${sourceFilename}_${selectedCallout.calloutID || 'center'}.canvas`;
         const canvasPath = `${this.settings.canvasStorageFolder}/${canvasFileName}`;
         
         try {
@@ -2070,10 +2114,11 @@ export default class CalloutOrganizerPlugin extends Plugin {
         return { callouts: relatedCallouts, connections };
     }
 
-    private async getRelatedCallouts(selectedCallout: CalloutItem): Promise<{callouts: CalloutItem[], connections: Map<string, Set<string>>}> {
-        // 优先使用canvas连接方式
-        return this.getCanvasConnections(selectedCallout);
-    }
+    // Note: Currently unused but kept for potential future use
+    // private async getRelatedCallouts(selectedCallout: CalloutItem): Promise<{callouts: CalloutItem[], connections: Map<string, Set<string>>}> {
+    //     // 优先使用canvas连接方式
+    //     return this.getCanvasConnections(selectedCallout);
+    // }
 
     private async getRelatedCalloutsFromLinks(selectedCallout: CalloutItem): Promise<{callouts: CalloutItem[], connections: Map<string, Set<string>>}> {
         const cache = await this.loadCalloutCache();
@@ -2186,18 +2231,35 @@ export default class CalloutOrganizerPlugin extends Plugin {
 
     /**
      * 从canvas文件名中提取对应的callout信息
-     * 格式: callout-{filename}-{calloutID}.canvas
-     * 例如: callout-Test-a.canvas -> { filename: "Test.md", calloutID: "a" }
+     * 新规范: callout_filename_calloutid.canvas
+     * 例如: callout_CanvasCallouts_example-id.canvas -> { filename: "CanvasCallouts.md", calloutID: "example-id" }
+     * 注意：calloutID中不包含下划线，filename可能包含下划线
      */
     private extractCalloutFromCanvasName(canvasFileName: string): { filename: string; calloutID: string } | null {
-        const match = canvasFileName.match(/^callout-(.+)-([^-]+)\.canvas$/);
-        if (match) {
-            const [, filename, calloutID] = match;
-            // 如果文件名不以.md结尾，自动添加
-            const fullFilename = filename.endsWith('.md') ? filename : `${filename}.md`;
-            return { filename: fullFilename, calloutID };
+        // 新规范: callout_filename_calloutid.canvas
+        // - calloutID中不包含下划线
+        // - filename可能包含下划线
+        // - 最后一个下划线后面是calloutID，第一个下划线和最后一个下划线之间是filename
+        if (!canvasFileName.startsWith('callout_') || !canvasFileName.endsWith('.canvas')) {
+            return null;
         }
-        return null;
+        
+        // 移除前缀和后缀
+        const withoutPrefixSuffix = canvasFileName.slice(8, -7); // 移除 "callout_" 和 ".canvas"
+        
+        // 找到最后一个下划线，它分隔filename和calloutID
+        const lastUnderscoreIndex = withoutPrefixSuffix.lastIndexOf('_');
+        if (lastUnderscoreIndex === -1) {
+            return null;
+        }
+        
+        const filename = withoutPrefixSuffix.slice(0, lastUnderscoreIndex);
+        const calloutID = withoutPrefixSuffix.slice(lastUnderscoreIndex + 1);
+        
+        // 确保filename有.md扩展名
+        const filenameWithExt = filename.endsWith('.md') ? filename : `${filename}.md`;
+        
+        return { filename: filenameWithExt, calloutID };
     }
 
     /**
@@ -2205,11 +2267,16 @@ export default class CalloutOrganizerPlugin extends Plugin {
      */
     private async analyzeCanvasLinks(callouts: CalloutItem[]): Promise<CalloutItem[]> {
         try {
-            // 初始化所有callout的outlinks（移除inlinks冗余）
+            // Canvas link analysis started
+            // Processing callouts for canvas links
+            
+            // Preserve existing outlinks from text content, add canvas-based ones
             const updatedCallouts = callouts.map(callout => ({
                 ...callout,
-                outlinks: []
+                outlinks: [...(callout.outlinks || [])] // Keep existing outlinks from text content
             }));
+            
+            // Preserving existing outlinks, adding canvas-based relationships
 
             // 创建[filename, calloutID]到callout的映射
             const calloutMap = new Map<string, CalloutItem>();
@@ -2220,28 +2287,46 @@ export default class CalloutOrganizerPlugin extends Plugin {
                 }
             });
             // 获取canvas存储文件夹中的所有canvas文件
+            // Looking for canvas folder
             const canvasFolder = this.app.vault.getAbstractFileByPath(this.settings.canvasStorageFolder);
             if (!canvasFolder || !(canvasFolder instanceof TFolder)) {
-                console.log('Canvas folder not found, skipping link analysis');
+                // Canvas folder not found, skipping link analysis
+                // Available folders logged to console
                 return updatedCallouts;
             }
+            // Found canvas folder
 
             const canvasFiles = canvasFolder.children.filter(file => 
                 file instanceof TFile && file.extension === 'canvas'
             ) as TFile[];
+            
+            // Found canvas files
 
             // 分析每个canvas文件
             for (const canvasFile of canvasFiles) {
                 try {
+                    // Processing canvas file
                     const canvasContent = await this.app.vault.read(canvasFile);
                     const canvasData = JSON.parse(canvasContent);
                     
                     // 从canvas文件名中提取对应的callout信息
                     const targetCallout = this.extractCalloutFromCanvasName(canvasFile.name);
                     if (!targetCallout) {
-                        console.log(`Skipping canvas ${canvasFile.name}: invalid filename format`);
+                        // Skipping canvas: invalid filename format
                         continue;
                     }
+                    
+                    // Extracted callout info from canvas filename
+                    
+                    // Check if this callout exists in our callout map
+                    const targetKey = `${targetCallout.filename}:${targetCallout.calloutID}`;
+                    const targetCalloutItem = calloutMap.get(targetKey);
+                    if (!targetCalloutItem) {
+                        // Target callout not found in callout map
+                        // Available callout keys logged
+                        continue;
+                    }
+                    // Found target callout
                     
                     
                     if (canvasData.edges && Array.isArray(canvasData.edges) && canvasData.nodes && Array.isArray(canvasData.nodes)) {
@@ -2252,10 +2337,12 @@ export default class CalloutOrganizerPlugin extends Plugin {
                         canvasData.nodes.forEach((node: any) => {
                             if (node.type === 'text' && node.text) {
                                 // 从嵌入链接解析文本节点
+                                // Processing text node
                                 const embedMatch = node.text.match(/!\[\[([^#\]]+)#\^([^\]]+)\]\]/);
                                 if (embedMatch) {
                                     const filename = embedMatch[1];
                                     const calloutID = embedMatch[2];
+                                    // Found embed
                                     nodeIdToCallout.set(node.id, [filename, calloutID]);
                                     
                                     // 检查是否是我们要找的源节点 (比较时去掉.md扩展名)
@@ -2263,6 +2350,8 @@ export default class CalloutOrganizerPlugin extends Plugin {
                                     if (filename === targetFilename && calloutID === targetCallout.calloutID) {
                                         targetFromNodeId = node.id;
                                     }
+                                } else {
+                                    // Text node does not match embed pattern
                                 }
                             } else if (node.type === 'file' && node.file && node.subpath) {
                                 // 处理文件类型节点
@@ -2287,13 +2376,16 @@ export default class CalloutOrganizerPlugin extends Plugin {
                         
                         // 分析边（连接）- 使用找到的实际节点ID
                         const targetEdges = canvasData.edges.filter((edge: any) => edge.fromNode === targetFromNodeId);
+                        // Found edges for target node
                         
                         targetEdges.forEach((edge: any) => {
                             const fromNodeId = edge.fromNode;
                             const toNodeId = edge.toNode;
+                            // Processing edge
                             
                             const fromCalloutInfo = nodeIdToCallout.get(fromNodeId);
                             const toCalloutInfo = nodeIdToCallout.get(toNodeId);
+                            // Processing edge between callouts
                             
                             if (fromCalloutInfo && toCalloutInfo) {
                                 const [fromFile, fromCalloutID] = fromCalloutInfo;
@@ -2322,11 +2414,11 @@ export default class CalloutOrganizerPlugin extends Plugin {
             }
 
             // 显示最终的链接统计（只显示outlinks）
-            console.log('Final link analysis results:');
+            // Final link analysis completed
             updatedCallouts.forEach(callout => {
                 if (callout.outlinks && callout.outlinks.length > 0) {
-                    console.log(`${callout.file}#^${callout.calloutID}:`);
-                    console.log(`  outlinks: ${(callout.outlinks as [string, string][]).map(([f, id]) => `${f}#^${id}`).join(', ')}`);
+                    // Callout with outlinks
+                    // Outlinks logged
                 }
             });
 
@@ -2351,19 +2443,35 @@ export default class CalloutOrganizerPlugin extends Plugin {
         if (canvasNodeProps) {
             try {
                 const props = JSON.parse(canvasNodeProps);
-                // Use setTimeout to allow canvas to create the node first
-                setTimeout(() => {
-                    this.fixCanvasNodeId(canvasEl, props);
-                    // Remove duplicate text nodes that might have been created from text/plain data
-                    this.removeDuplicateTextNodes(canvasEl, props);
-                    // Additional deselection after a longer delay to ensure it takes effect
-                    setTimeout(() => {
-                        this.deselectAllCanvasNodes();
-                    }, 200);
-                }, 100);
+                // Use requestAnimationFrame to prevent ResizeObserver loops
+                requestAnimationFrame(() => {
+                    this.performCanvasOperations(canvasEl, props);
+                });
             } catch (error) {
                 console.error('Error parsing canvas node props:', error);
             }
+        }
+    }
+
+    /**
+     * Perform canvas operations in a controlled manner to prevent ResizeObserver loops
+     */
+    private async performCanvasOperations(canvasEl: Element, props: any) {
+        try {
+            // Batch DOM operations to prevent layout thrashing
+            await this.fixCanvasNodeId(canvasEl, props);
+            
+            // Use another frame for the next operation to prevent cascading layout changes
+            requestAnimationFrame(() => {
+                this.removeDuplicateTextNodes(canvasEl, props);
+                
+                // Final operation after all DOM changes are complete
+                requestAnimationFrame(() => {
+                    this.deselectAllCanvasNodes();
+                });
+            });
+        } catch (error) {
+            console.error('Error performing canvas operations:', error);
         }
     }
 
@@ -2372,33 +2480,26 @@ export default class CalloutOrganizerPlugin extends Plugin {
      */
     private deselectAllCanvasNodes() {
         try {
-            const activeLeaf = this.app.workspace.activeLeaf;
-            if (activeLeaf && activeLeaf.view && activeLeaf.view.getViewType() === 'canvas') {
-                const canvasView = activeLeaf.view as any;
-                const canvas = canvasView.canvas;
-                
-                if (canvas) {
-                    // Try multiple methods to deselect nodes
-                    if (canvas.selection && canvas.selection.clear) {
-                        canvas.selection.clear();
-                    }
-                    
-                    if (canvas.deselectAll) {
-                        canvas.deselectAll();
-                    }
-                    
-                    // Force canvas to blur any focused elements
-                    if (canvas.wrapperEl) {
-                        const focusedElement = canvas.wrapperEl.querySelector(':focus');
-                        if (focusedElement && focusedElement.blur) {
-                            focusedElement.blur();
-                        }
-                    }
-                    
-                    // Set focus back to the canvas container
-                    if (canvas.containerEl && canvas.containerEl.focus) {
-                        canvas.containerEl.focus();
-                    }
+            const activeLeaf = this.app.workspace.getActiveViewOfType('canvas' as any);
+            if (!activeLeaf) return;
+            
+            const canvasView = activeLeaf as any;
+            const canvas = (canvasView as any).canvas;
+            
+            if (!canvas) return;
+            
+            // Use a single method to clear selection to prevent multiple DOM updates
+            if (canvas.selection && canvas.selection.clear) {
+                canvas.selection.clear();
+            } else if (canvas.deselectAll) {
+                canvas.deselectAll();
+            }
+            
+            // Minimal DOM manipulation to prevent ResizeObserver loops
+            if (canvas.wrapperEl) {
+                const focusedElement = canvas.wrapperEl.querySelector(':focus');
+                if (focusedElement && typeof focusedElement.blur === 'function') {
+                    focusedElement.blur();
                 }
             }
         } catch (error) {
@@ -2409,19 +2510,18 @@ export default class CalloutOrganizerPlugin extends Plugin {
     /**
      * Fix the canvas node ID after it's been created
      */
-    private async fixCanvasNodeId(canvasEl: Element, nodeProps: any) {
+    private async fixCanvasNodeId(_canvasEl: Element, nodeProps: any) {
         try {
             // Find the active canvas view
-            const activeLeaf = this.app.workspace.activeLeaf;
-            if (activeLeaf && activeLeaf.view && activeLeaf.view.getViewType() === 'canvas') {
-                const canvasView = activeLeaf.view as any;
-                const canvas = canvasView.canvas;
+            const canvasView = this.app.workspace.getActiveViewOfType('canvas' as any);
+            if (canvasView) {
+                const canvas = (canvasView as any).canvas;
                 
                 if (!canvas || !canvas.nodes) return;
                 
                 // Check if a node with the desired ID already exists
                 if (canvas.nodes.has(nodeProps.id)) {
-                    console.log(`Node with ID ${nodeProps.id} already exists, skipping`);
+                    // Node with ID already exists, skipping
                     return;
                 }
                 
@@ -2438,7 +2538,7 @@ export default class CalloutOrganizerPlugin extends Plugin {
                 }
                 
                 if (targetNode && oldNodeId && nodeProps.id) {
-                    console.log(`Updating canvas node ID from ${oldNodeId} to ${nodeProps.id}`);
+                    // Updating canvas node ID
                     
                     // Store the old node ID before changing it
                     const originalId = targetNode.id;
@@ -2452,29 +2552,9 @@ export default class CalloutOrganizerPlugin extends Plugin {
                     // Add the node with the new ID
                     canvas.nodes.set(nodeProps.id, targetNode);
                     
-                    // Deselect the node to prevent it from staying in edit mode
-                    if (canvas.selection && canvas.selection.clear) {
-                        canvas.selection.clear();
-                    }
-                    
-                    // Alternative: deselect all nodes if the above doesn't work
-                    if (canvas.deselectAll) {
-                        canvas.deselectAll();
-                    }
-                    
-                    // If the node has a blur method, call it to exit edit mode
-                    if (targetNode.blur) {
-                        targetNode.blur();
-                    }
-                    
-                    // Trigger canvas update and save
+                    // Minimal canvas update to prevent excessive DOM manipulation
                     if (canvas.requestSave) {
                         canvas.requestSave();
-                    }
-                    
-                    // Force canvas to re-render to ensure UI consistency
-                    if (canvas.markDirty) {
-                        canvas.markDirty();
                     }
                 }
             }
@@ -2486,13 +2566,12 @@ export default class CalloutOrganizerPlugin extends Plugin {
     /**
      * Remove duplicate text nodes that contain embed links matching our file nodes
      */
-    private async removeDuplicateTextNodes(canvasEl: Element, nodeProps: any) {
+    private async removeDuplicateTextNodes(_canvasEl: Element, nodeProps: any) {
         try {
             // Find the active canvas view
-            const activeLeaf = this.app.workspace.activeLeaf;
-            if (activeLeaf && activeLeaf.view && activeLeaf.view.getViewType() === 'canvas') {
-                const canvasView = activeLeaf.view as any;
-                const canvas = canvasView.canvas;
+            const canvasView = this.app.workspace.getActiveViewOfType('canvas' as any);
+            if (canvasView) {
+                const canvas = (canvasView as any).canvas;
                 
                 if (!canvas || !canvas.nodes) return;
                 
@@ -2504,7 +2583,7 @@ export default class CalloutOrganizerPlugin extends Plugin {
                 let hasMatchingFileNode = false;
                 
                 // First, check if we have a file node with matching file+subpath
-                for (const [nodeId, node] of canvas.nodes) {
+                for (const [_nodeId, node] of canvas.nodes) {
                     if (node.type === 'file' && 
                         node.file === nodeProps.file && 
                         node.subpath === nodeProps.subpath) {
@@ -2515,18 +2594,18 @@ export default class CalloutOrganizerPlugin extends Plugin {
                 
                 // If we found a matching file node, remove text nodes with the same embed
                 if (hasMatchingFileNode) {
-                    for (const [nodeId, node] of canvas.nodes) {
+                    for (const [_nodeId, node] of canvas.nodes) {
                         if (node.type === 'text' && 
                             node.text && 
                             node.text.includes(expectedEmbedText)) {
-                            nodesToRemove.push(nodeId);
+                            nodesToRemove.push(_nodeId);
                         }
                     }
                 }
                 
                 // Remove the duplicate text nodes
                 for (const nodeId of nodesToRemove) {
-                    console.log(`Removing duplicate text node: ${nodeId}`);
+                    // Removing duplicate text node
                     canvas.nodes.delete(nodeId);
                 }
                 
@@ -2567,14 +2646,14 @@ export default class CalloutOrganizerPlugin extends Plugin {
     }
 
     async extractAllCallouts(): Promise<CalloutItem[]> {
-        console.log('=== extractAllCallouts called ===');
+        // Extract all callouts from vault files
         
         // Try to load from cache first
         if (this.settings.enableFileCache) {
-            console.log('File cache is enabled, checking for existing cache...');
+            // Try to load from cache first
             const cache = await this.loadCalloutCache();
             if (cache && await this.isCacheValid(cache)) {
-                console.log(`✅ Using cached callouts: ${cache.callouts.length} items`);
+                // Using cached callouts
                 // Sort callouts by modification time (recent first) for search mode
                 const sortedCallouts = [...cache.callouts].sort((a, b) => {
                     const aModTime = a.calloutModifyTime || a.fileModTime || '1970-01-01 00:00:00';
@@ -2583,24 +2662,24 @@ export default class CalloutOrganizerPlugin extends Plugin {
                 });
                 return sortedCallouts;
             } else {
-                console.log('❌ Cache invalid or not found, will scan files');
+                // Cache invalid or not found, will scan files
             }
         } else {
-            console.log('File cache is disabled');
+            // File cache is disabled
         }
 
         // Cache miss or invalid, scan all files
-        console.log('📁 Scanning all files for callouts...');
+        // Scanning all files for callouts
         const callouts = await this.scanAllCallouts();
         
         // Save to cache if enabled
         if (this.settings.enableFileCache) {
-            console.log('💾 Saving to cache...');
+            // Saving to cache
             const saveResult = await this.saveCalloutCache(callouts);
             if (saveResult) {
-                console.log(`✅ Saved ${callouts.length} callouts to cache`);
+                // Successfully saved callouts to cache
             } else {
-                console.log('❌ Failed to save to cache');
+                // Failed to save to cache
             }
         }
 
@@ -2637,17 +2716,17 @@ export default class CalloutOrganizerPlugin extends Plugin {
     }
 
     async refreshAllCallouts(): Promise<CalloutItem[]> {
-        console.log('Refreshing callouts - rescanning all files...');
+        // Refreshing callouts - rescanning all files
         const callouts = await this.scanAllCallouts();
         
         // 分析canvas链接关系（只在手动刷新时执行）
-        console.log('Analyzing canvas connections...');
+        // Analyzing canvas connections
         const calloutsWithLinks = await this.analyzeCanvasLinks(callouts);
         
         // Update cache
         if (this.settings.enableFileCache) {
             await this.saveCalloutCache(calloutsWithLinks);
-            console.log(`Updated cache with ${calloutsWithLinks.length} callouts and their connections`);
+            // Updated cache with callouts and their connections
         }
 
         return calloutsWithLinks;
@@ -2674,7 +2753,7 @@ export default class CalloutOrganizerPlugin extends Plugin {
         }
         // Fallback: generate a temporary ID based on file hash and timestamp
         // This will be replaced with a real calloutID when the callout gets one
-        const tempId = `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        const tempId = `temp-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
         return `${filePath}:${tempId}`;
     }
 
@@ -2846,6 +2925,10 @@ export default class CalloutOrganizerPlugin extends Plugin {
                     calloutModifyTime: modificationTime
                 };
                 
+                // Parse outlinks from callout content
+                const outlinks = this.extractOutlinksFromContent(calloutItem.content, file.path, calloutID);
+                calloutItem.outlinks = outlinks;
+                
                 // Add optional properties only if they exist to save memory
                 if (calloutID) calloutItem.calloutID = calloutID;
                 if (hierarchy.length > 0) {
@@ -2858,6 +2941,63 @@ export default class CalloutOrganizerPlugin extends Plugin {
         }
         
         return callouts;
+    }
+
+    /**
+     * Extract outlinks from callout content
+     * Looks for patterns like [[#^calloutID]] or [[filename#^calloutID]]
+     */
+    private extractOutlinksFromContent(content: string, currentFilePath: string, currentCalloutID?: string): [string, string][] {
+        const outlinks: [string, string][] = [];
+        
+        // Add debug info to detect potential loops
+        // Processing outlinks
+        
+        // Match internal links: [[#^calloutID]] or [[filename#^calloutID]]
+        const linkRegex = /\[\[([^#\]]*)(#\^([^\]]+))?\]\]/g;
+        let match;
+        let matchCount = 0;
+        const MAX_MATCHES = 100; // Prevent infinite loops
+        
+        // Reset regex lastIndex to prevent issues
+        linkRegex.lastIndex = 0;
+        
+        while ((match = linkRegex.exec(content)) !== null && matchCount < MAX_MATCHES) {
+            matchCount++;
+            const filename = match[1] || ''; // Empty string for same-file links
+            const calloutID = match[3]; // The calloutID after #^
+            
+            // Found link
+            
+            if (calloutID) {
+                let targetFilename: string;
+                
+                if (!filename) {
+                    // Same-file link: [[#^calloutID]]
+                    targetFilename = currentFilePath;
+                } else {
+                    // Cross-file link: [[filename#^calloutID]]
+                    // Add .md extension if not present
+                    targetFilename = filename.endsWith('.md') ? filename : `${filename}.md`;
+                }
+                
+                
+                // Adding outlink
+                outlinks.push([targetFilename, calloutID]);
+            }
+            
+            // Additional safety check for zero-width matches
+            if (match.index === linkRegex.lastIndex) {
+                linkRegex.lastIndex++;
+            }
+        }
+        
+        if (matchCount >= MAX_MATCHES) {
+            console.error(`[ERROR] Potential infinite loop detected in extractOutlinksFromContent for ${currentFilePath}#^${currentCalloutID}`);
+        }
+        
+        // Found outlinks
+        return outlinks;
     }
 
     // Cache management methods
@@ -2877,13 +3017,13 @@ export default class CalloutOrganizerPlugin extends Plugin {
 
         try {
             const cacheFilePath = this.getCacheFilePath();
-            console.log(`Attempting to load cache from: ${cacheFilePath}`);
+            // Attempting to load cache from file
             
             // Use Obsidian's vault adapter instead of Node.js fs
             const adapter = this.app.vault.adapter;
             const exists = await adapter.exists(cacheFilePath);
             if (!exists) {
-                console.log('Cache file does not exist');
+                // Cache file does not exist
                 return null;
             }
 
@@ -2951,17 +3091,17 @@ export default class CalloutOrganizerPlugin extends Plugin {
 
             // Validate cache version and vault path
             if (cache.version !== CalloutOrganizerPlugin.CACHE_VERSION) {
-                console.log('Cache version mismatch, invalidating cache');
+                // Cache version mismatch, invalidating cache
                 return null;
             }
 
             const currentVaultPath = this.app.vault.getName() || '';
             if (cache.vaultPath !== currentVaultPath) {
-                console.log(`Vault path changed (${cache.vaultPath} != ${currentVaultPath}), invalidating cache`);
+                // Vault path changed, invalidating cache
                 return null;
             }
 
-            console.log(`✅ Successfully loaded ${cache.callouts.length} callouts from plugin folder cache`);
+            // Successfully loaded callouts from cache
             return cache;
         } catch (error) {
             console.warn('Failed to load callout cache:', error);
@@ -2971,11 +3111,11 @@ export default class CalloutOrganizerPlugin extends Plugin {
 
     async saveCalloutCache(callouts: CalloutItem[]): Promise<boolean> {
         if (!this.settings.enableFileCache) {
-            console.log('File cache is disabled, skipping save');
+            // File cache is disabled, skipping save
             return false;
         }
 
-        console.log(`Attempting to save ${callouts.length} callouts to cache...`);
+        // Attempting to save callouts to cache
 
         // Create a lock to prevent concurrent cache operations
         const saveOperation = async (): Promise<boolean> => {
@@ -3018,7 +3158,7 @@ export default class CalloutOrganizerPlugin extends Plugin {
             const cacheFilePath = this.getCacheFilePath();
             const cacheContent = JSON.stringify(cache, null, 2);
 
-            console.log(`Saving cache to: ${cacheFilePath}`);
+            // Saving cache to file
 
             // Ensure the directory exists
             const adapter = this.app.vault.adapter;
@@ -3028,7 +3168,7 @@ export default class CalloutOrganizerPlugin extends Plugin {
             }
 
             await adapter.write(cacheFilePath, cacheContent);
-            console.log('✅ Cache file saved successfully to plugin folder');
+            // Cache file saved successfully
             return true;
             } catch (error) {
                 console.error('Failed to save callout cache:', error);
@@ -3055,12 +3195,12 @@ export default class CalloutOrganizerPlugin extends Plugin {
                 const file = this.app.vault.getAbstractFileByPath(filePath);
                 if (file instanceof TFile) {
                     if (file.stat.mtime > readableToTimestamp(cachedModTime)) {
-                        console.log(`File ${filePath} has been modified, cache invalid`);
+                        // File has been modified, cache invalid
                         return false;
                     }
                 } else {
                     // File no longer exists
-                    console.log(`File ${filePath} no longer exists, cache invalid`);
+                    // File no longer exists, cache invalid
                     return false;
                 }
             }
@@ -3069,7 +3209,7 @@ export default class CalloutOrganizerPlugin extends Plugin {
             const currentFiles = this.app.vault.getMarkdownFiles();
             for (const file of currentFiles) {
                 if (!this.shouldSkipFile(file.path, true) && !cache.fileModTimes.hasOwnProperty(file.path)) {
-                    console.log(`New file ${file.path} found, cache invalid`);
+                    // New file found, cache invalid
                     return false;
                 }
             }
@@ -3083,6 +3223,11 @@ export default class CalloutOrganizerPlugin extends Plugin {
 
     onunload() {
         this.app.workspace.detachLeavesOfType(VIEW_TYPE_CALLOUT_ORGANIZER);
+        
+        // Restore original error handler
+        if (this.originalErrorHandler !== null) {
+            window.onerror = this.originalErrorHandler;
+        }
         
         // Clean up style element
         if (this.styleElement) {
@@ -3153,7 +3298,7 @@ class CalloutOrganizerSettingTab extends PluginSettingTab {
                             
                             if (cacheFile && cacheFile instanceof TFile) {
                                 await this.app.vault.delete(cacheFile);
-                                console.log('Cache file deleted via Obsidian API');
+                                // Cache file deleted
                             }
                             
                             // Also try to clean up from plugin folder using Obsidian adapter
@@ -3162,7 +3307,7 @@ class CalloutOrganizerSettingTab extends PluginSettingTab {
                             
                             if (await adapter.exists(pluginCachePath)) {
                                 await adapter.remove(pluginCachePath);
-                                console.log('Plugin folder cache file also deleted');
+                                // Plugin folder cache file also deleted
                             }
                         } catch (error) {
                             console.warn('Failed to delete cache file:', error);
@@ -3876,26 +4021,26 @@ class CalloutSelectorModal extends Modal {
             const item = this.resultContainer.createDiv('callout-selector-item');
             
             // Callout类型标签
-            const typeTag = item.createEl('span', { 
+            const _typeTag = item.createEl('span', { 
                 text: callout.type, 
                 cls: 'callout-selector-type-tag' 
             });
 
             // Callout标题
-            const title = item.createEl('div', { 
+            const _title = item.createEl('div', { 
                 text: callout.title || 'Untitled', 
                 cls: 'callout-selector-title' 
             });
 
             // 文件信息
-            const fileInfo = item.createEl('div', { 
+            const _fileInfo = item.createEl('div', { 
                 text: `📄 ${callout.file}`, 
                 cls: 'callout-selector-file' 
             });
 
             // 内容预览
             if (callout.content) {
-                const preview = item.createEl('div', { 
+                const _preview = item.createEl('div', { 
                     text: callout.content.slice(0, 100) + (callout.content.length > 100 ? '...' : ''), 
                     cls: 'callout-selector-preview' 
                 });

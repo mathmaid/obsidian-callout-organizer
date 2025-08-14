@@ -294,15 +294,14 @@ var CalloutOrganizerView = class extends import_obsidian.ItemView {
       cls: "callout-refresh-button"
     });
     (0, import_obsidian.setIcon)(refreshBtn, "refresh-cw");
-    refreshBtn.onclick = async () => {
+    refreshBtn.onmousedown = async (e) => {
+      e.preventDefault();
       if (this.searchMode === "search") {
         await this.plugin.refreshAllCallouts();
         await this.refreshCallouts();
-        console.log("Callouts refreshed and saved to JSON file!");
       } else {
         await this.plugin.refreshAllCallouts();
         await this.refreshCallouts();
-        console.log("Current file callouts refreshed! Cache updated.");
       }
     };
     const secondLine = container.createEl("div", { cls: "callout-top-bar-line-2" });
@@ -325,7 +324,8 @@ var CalloutOrganizerView = class extends import_obsidian.ItemView {
         text: allSelected ? "Clear All" : "Select All",
         cls: "callout-clear-all-button"
       });
-      toggleButton.onclick = (e) => {
+      toggleButton.onmousedown = (e) => {
+        e.preventDefault();
         e.stopPropagation();
         const currentlyAllSelected = this.activeFilters.size === uniqueTypes.length;
         if (currentlyAllSelected) {
@@ -369,7 +369,8 @@ var CalloutOrganizerView = class extends import_obsidian.ItemView {
       if (this.activeFilters.has(type)) {
         button.addClass("active");
       }
-      button.onclick = (e) => {
+      button.onmousedown = (e) => {
+        e.preventDefault();
         e.stopPropagation();
         if (this.activeFilters.has(type)) {
           this.activeFilters.delete(type);
@@ -521,11 +522,6 @@ var CalloutOrganizerView = class extends import_obsidian.ItemView {
         e.dataTransfer.effectAllowed = "copy";
         calloutEl.style.opacity = "0.5";
         if (needsNewId && calloutID) {
-          queueMicrotask(() => {
-            this.addCalloutIdToCallout(callout, calloutID).catch((error) => {
-              console.error("Error adding callout ID to file:", error);
-            });
-          });
         }
       }
     };
@@ -558,11 +554,18 @@ var CalloutOrganizerView = class extends import_obsidian.ItemView {
       import_obsidian.MarkdownRenderer.render(this.app, displayTitle, titleEl, callout.file, this.component).then(() => {
         this.processMathForElement(titleEl);
         titleEl.style.color = calloutColor;
+      }).catch((error) => {
+        console.warn("Failed to render callout title:", error);
+        titleEl.textContent = displayTitle;
+        titleEl.style.color = calloutColor;
       });
     }
     const content = calloutEl.createEl("div", { cls: "callout-organizer-content" });
     import_obsidian.MarkdownRenderer.render(this.app, callout.content, content, callout.file, this.component).then(() => {
       this.processMathForElement(content);
+    }).catch((error) => {
+      console.warn("Failed to render callout content:", error);
+      content.textContent = callout.content;
     });
     const breadcrumb = calloutEl.createEl("div", { cls: "callout-organizer-breadcrumb" });
     if (this.plugin.settings.showFilenames) {
@@ -826,6 +829,7 @@ var CalloutOrganizerView = class extends import_obsidian.ItemView {
     }
     const delay = this.callouts.length > 100 ? this.SEARCH_DEBOUNCE_DELAY * 2 : this.SEARCH_DEBOUNCE_DELAY;
     this.searchDebounceTimer = setTimeout(() => {
+      this.searchDebounceTimer = null;
       const calloutContainer = this.calloutContainerElement || this.containerEl.querySelector(".callout-container");
       if (calloutContainer) {
         this.renderCalloutsList(calloutContainer);
@@ -892,9 +896,26 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
     super(...arguments);
     this.cacheOperationLock = null;
     this.styleElement = null;
+    this.originalErrorHandler = null;
+  }
+  /**
+   * Setup ResizeObserver error handler to suppress loop warnings
+   */
+  setupResizeObserverErrorHandler() {
+    this.originalErrorHandler = window.onerror;
+    window.onerror = (message, source, lineno, colno, error) => {
+      if (typeof message === "string" && message.includes("ResizeObserver loop completed with undelivered notifications")) {
+        return true;
+      }
+      if (this.originalErrorHandler) {
+        return this.originalErrorHandler(message, source, lineno, colno, error);
+      }
+      return false;
+    };
   }
   async onload() {
     await this.loadSettings();
+    this.setupResizeObserverErrorHandler();
     this.registerView(
       VIEW_TYPE_CALLOUT_ORGANIZER,
       (leaf) => new CalloutOrganizerView(leaf, this, "current")
@@ -1252,7 +1273,7 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
   }
   async activateCalloutOrganizer() {
     this.app.workspace.detachLeavesOfType(VIEW_TYPE_CALLOUT_ORGANIZER);
-    const rightLeaf = this.app.workspace.getRightLeaf(false);
+    const rightLeaf = this.app.workspace.getLeaf("split", "vertical");
     if (rightLeaf) {
       await rightLeaf.setViewState({
         type: VIEW_TYPE_CALLOUT_ORGANIZER,
@@ -1294,7 +1315,7 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
     var _a, _b;
     try {
       const sourceFilename = ((_b = (_a = selectedCallout.file) == null ? void 0 : _a.split("/").pop()) == null ? void 0 : _b.replace(".md", "")) || "unknown";
-      const canvasFileName = `callout-${sourceFilename}-${selectedCallout.calloutID || Date.now()}.canvas`;
+      const canvasFileName = `callout_${sourceFilename}_${selectedCallout.calloutID || Date.now()}.canvas`;
       const canvasPath = `${this.settings.canvasStorageFolder}/${canvasFileName}`;
       const canvasFolder = this.app.vault.getAbstractFileByPath(this.settings.canvasStorageFolder);
       if (!canvasFolder) {
@@ -1320,7 +1341,7 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
       const cache = await this.loadCalloutCache();
       const allCallouts = (cache == null ? void 0 : cache.callouts) || [];
       const getCalloutKey = (callout) => `${callout.file}:${callout.calloutID}`;
-      const mainCalloutKey = getCalloutKey(selectedCallout);
+      const _mainCalloutKey = getCalloutKey(selectedCallout);
       const calloutMap = /* @__PURE__ */ new Map();
       allCallouts.forEach((callout) => {
         if (callout.calloutID) {
@@ -1492,7 +1513,6 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
         let canvasFile = this.app.vault.getAbstractFileByPath(canvasPath);
         if (canvasFile) {
           await this.app.vault.delete(canvasFile);
-          console.log(`Deleted existing canvas file: ${canvasPath}`);
         }
         const canvasContent = JSON.stringify(canvasData, null, "	");
         canvasFile = await this.app.vault.create(canvasPath, canvasContent);
@@ -1530,7 +1550,7 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
     const connections = /* @__PURE__ */ new Map();
     const getCalloutKey = (callout) => `${callout.file}:${callout.calloutID}`;
     const sourceFilename = ((_b = (_a = selectedCallout.file) == null ? void 0 : _a.split("/").pop()) == null ? void 0 : _b.replace(".md", "")) || "unknown";
-    const canvasFileName = `callout-${sourceFilename}-${selectedCallout.calloutID || "center"}.canvas`;
+    const canvasFileName = `callout_${sourceFilename}_${selectedCallout.calloutID || "center"}.canvas`;
     const canvasPath = `${this.settings.canvasStorageFolder}/${canvasFileName}`;
     try {
       const canvasFile = this.app.vault.getAbstractFileByPath(canvasPath);
@@ -1581,9 +1601,11 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
     }
     return { callouts: relatedCallouts, connections };
   }
-  async getRelatedCallouts(selectedCallout) {
-    return this.getCanvasConnections(selectedCallout);
-  }
+  // Note: Currently unused but kept for potential future use
+  // private async getRelatedCallouts(selectedCallout: CalloutItem): Promise<{callouts: CalloutItem[], connections: Map<string, Set<string>>}> {
+  //     // 优先使用canvas连接方式
+  //     return this.getCanvasConnections(selectedCallout);
+  // }
   async getRelatedCalloutsFromLinks(selectedCallout) {
     const cache = await this.loadCalloutCache();
     const allCallouts = (cache == null ? void 0 : cache.callouts) || [];
@@ -1657,17 +1679,23 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
   }
   /**
    * 从canvas文件名中提取对应的callout信息
-   * 格式: callout-{filename}-{calloutID}.canvas
-   * 例如: callout-Test-a.canvas -> { filename: "Test.md", calloutID: "a" }
+   * 新规范: callout_filename_calloutid.canvas
+   * 例如: callout_CanvasCallouts_example-id.canvas -> { filename: "CanvasCallouts.md", calloutID: "example-id" }
+   * 注意：calloutID中不包含下划线，filename可能包含下划线
    */
   extractCalloutFromCanvasName(canvasFileName) {
-    const match = canvasFileName.match(/^callout-(.+)-([^-]+)\.canvas$/);
-    if (match) {
-      const [, filename, calloutID] = match;
-      const fullFilename = filename.endsWith(".md") ? filename : `${filename}.md`;
-      return { filename: fullFilename, calloutID };
+    if (!canvasFileName.startsWith("callout_") || !canvasFileName.endsWith(".canvas")) {
+      return null;
     }
-    return null;
+    const withoutPrefixSuffix = canvasFileName.slice(8, -7);
+    const lastUnderscoreIndex = withoutPrefixSuffix.lastIndexOf("_");
+    if (lastUnderscoreIndex === -1) {
+      return null;
+    }
+    const filename = withoutPrefixSuffix.slice(0, lastUnderscoreIndex);
+    const calloutID = withoutPrefixSuffix.slice(lastUnderscoreIndex + 1);
+    const filenameWithExt = filename.endsWith(".md") ? filename : `${filename}.md`;
+    return { filename: filenameWithExt, calloutID };
   }
   /**
    * 分析canvas文件中的链接关系，只更新outlinks（移除inlinks冗余）
@@ -1676,7 +1704,8 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
     try {
       const updatedCallouts = callouts.map((callout) => ({
         ...callout,
-        outlinks: []
+        outlinks: [...callout.outlinks || []]
+        // Keep existing outlinks from text content
       }));
       const calloutMap = /* @__PURE__ */ new Map();
       updatedCallouts.forEach((callout) => {
@@ -1687,7 +1716,6 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
       });
       const canvasFolder = this.app.vault.getAbstractFileByPath(this.settings.canvasStorageFolder);
       if (!canvasFolder || !(canvasFolder instanceof import_obsidian.TFolder)) {
-        console.log("Canvas folder not found, skipping link analysis");
         return updatedCallouts;
       }
       const canvasFiles = canvasFolder.children.filter(
@@ -1699,7 +1727,11 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
           const canvasData = JSON.parse(canvasContent);
           const targetCallout = this.extractCalloutFromCanvasName(canvasFile.name);
           if (!targetCallout) {
-            console.log(`Skipping canvas ${canvasFile.name}: invalid filename format`);
+            continue;
+          }
+          const targetKey = `${targetCallout.filename}:${targetCallout.calloutID}`;
+          const targetCalloutItem = calloutMap.get(targetKey);
+          if (!targetCalloutItem) {
             continue;
           }
           if (canvasData.edges && Array.isArray(canvasData.edges) && canvasData.nodes && Array.isArray(canvasData.nodes)) {
@@ -1716,6 +1748,7 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
                   if (filename === targetFilename && calloutID === targetCallout.calloutID) {
                     targetFromNodeId = node.id;
                   }
+                } else {
                 }
               } else if (node.type === "file" && node.file && node.subpath) {
                 const fileMatch = node.subpath.match(/^#\^(.+)$/);
@@ -1759,11 +1792,8 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
           console.warn(`Failed to analyze canvas file ${canvasFile.path}:`, error);
         }
       }
-      console.log("Final link analysis results:");
       updatedCallouts.forEach((callout) => {
         if (callout.outlinks && callout.outlinks.length > 0) {
-          console.log(`${callout.file}#^${callout.calloutID}:`);
-          console.log(`  outlinks: ${callout.outlinks.map(([f, id]) => `${f}#^${id}`).join(", ")}`);
         }
       });
       return updatedCallouts;
@@ -1784,16 +1814,28 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
     if (canvasNodeProps) {
       try {
         const props = JSON.parse(canvasNodeProps);
-        setTimeout(() => {
-          this.fixCanvasNodeId(canvasEl, props);
-          this.removeDuplicateTextNodes(canvasEl, props);
-          setTimeout(() => {
-            this.deselectAllCanvasNodes();
-          }, 200);
-        }, 100);
+        requestAnimationFrame(() => {
+          this.performCanvasOperations(canvasEl, props);
+        });
       } catch (error) {
         console.error("Error parsing canvas node props:", error);
       }
+    }
+  }
+  /**
+   * Perform canvas operations in a controlled manner to prevent ResizeObserver loops
+   */
+  async performCanvasOperations(canvasEl, props) {
+    try {
+      await this.fixCanvasNodeId(canvasEl, props);
+      requestAnimationFrame(() => {
+        this.removeDuplicateTextNodes(canvasEl, props);
+        requestAnimationFrame(() => {
+          this.deselectAllCanvasNodes();
+        });
+      });
+    } catch (error) {
+      console.error("Error performing canvas operations:", error);
     }
   }
   /**
@@ -1801,26 +1843,22 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
    */
   deselectAllCanvasNodes() {
     try {
-      const activeLeaf = this.app.workspace.activeLeaf;
-      if (activeLeaf && activeLeaf.view && activeLeaf.view.getViewType() === "canvas") {
-        const canvasView = activeLeaf.view;
-        const canvas = canvasView.canvas;
-        if (canvas) {
-          if (canvas.selection && canvas.selection.clear) {
-            canvas.selection.clear();
-          }
-          if (canvas.deselectAll) {
-            canvas.deselectAll();
-          }
-          if (canvas.wrapperEl) {
-            const focusedElement = canvas.wrapperEl.querySelector(":focus");
-            if (focusedElement && focusedElement.blur) {
-              focusedElement.blur();
-            }
-          }
-          if (canvas.containerEl && canvas.containerEl.focus) {
-            canvas.containerEl.focus();
-          }
+      const activeLeaf = this.app.workspace.getActiveViewOfType("canvas");
+      if (!activeLeaf)
+        return;
+      const canvasView = activeLeaf;
+      const canvas = canvasView.canvas;
+      if (!canvas)
+        return;
+      if (canvas.selection && canvas.selection.clear) {
+        canvas.selection.clear();
+      } else if (canvas.deselectAll) {
+        canvas.deselectAll();
+      }
+      if (canvas.wrapperEl) {
+        const focusedElement = canvas.wrapperEl.querySelector(":focus");
+        if (focusedElement && typeof focusedElement.blur === "function") {
+          focusedElement.blur();
         }
       }
     } catch (error) {
@@ -1830,16 +1868,14 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
   /**
    * Fix the canvas node ID after it's been created
    */
-  async fixCanvasNodeId(canvasEl, nodeProps) {
+  async fixCanvasNodeId(_canvasEl, nodeProps) {
     try {
-      const activeLeaf = this.app.workspace.activeLeaf;
-      if (activeLeaf && activeLeaf.view && activeLeaf.view.getViewType() === "canvas") {
-        const canvasView = activeLeaf.view;
+      const canvasView = this.app.workspace.getActiveViewOfType("canvas");
+      if (canvasView) {
         const canvas = canvasView.canvas;
         if (!canvas || !canvas.nodes)
           return;
         if (canvas.nodes.has(nodeProps.id)) {
-          console.log(`Node with ID ${nodeProps.id} already exists, skipping`);
           return;
         }
         let targetNode = null;
@@ -1852,25 +1888,12 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
           }
         }
         if (targetNode && oldNodeId && nodeProps.id) {
-          console.log(`Updating canvas node ID from ${oldNodeId} to ${nodeProps.id}`);
           const originalId = targetNode.id;
           targetNode.id = nodeProps.id;
           canvas.nodes.delete(originalId);
           canvas.nodes.set(nodeProps.id, targetNode);
-          if (canvas.selection && canvas.selection.clear) {
-            canvas.selection.clear();
-          }
-          if (canvas.deselectAll) {
-            canvas.deselectAll();
-          }
-          if (targetNode.blur) {
-            targetNode.blur();
-          }
           if (canvas.requestSave) {
             canvas.requestSave();
-          }
-          if (canvas.markDirty) {
-            canvas.markDirty();
           }
         }
       }
@@ -1881,32 +1904,30 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
   /**
    * Remove duplicate text nodes that contain embed links matching our file nodes
    */
-  async removeDuplicateTextNodes(canvasEl, nodeProps) {
+  async removeDuplicateTextNodes(_canvasEl, nodeProps) {
     try {
-      const activeLeaf = this.app.workspace.activeLeaf;
-      if (activeLeaf && activeLeaf.view && activeLeaf.view.getViewType() === "canvas") {
-        const canvasView = activeLeaf.view;
+      const canvasView = this.app.workspace.getActiveViewOfType("canvas");
+      if (canvasView) {
         const canvas = canvasView.canvas;
         if (!canvas || !canvas.nodes)
           return;
         const expectedEmbedText = `![[${nodeProps.file.replace(/\.md$/, "")}${nodeProps.subpath}]]`;
         const nodesToRemove = [];
         let hasMatchingFileNode = false;
-        for (const [nodeId, node] of canvas.nodes) {
+        for (const [_nodeId, node] of canvas.nodes) {
           if (node.type === "file" && node.file === nodeProps.file && node.subpath === nodeProps.subpath) {
             hasMatchingFileNode = true;
             break;
           }
         }
         if (hasMatchingFileNode) {
-          for (const [nodeId, node] of canvas.nodes) {
+          for (const [_nodeId, node] of canvas.nodes) {
             if (node.type === "text" && node.text && node.text.includes(expectedEmbedText)) {
-              nodesToRemove.push(nodeId);
+              nodesToRemove.push(_nodeId);
             }
           }
         }
         for (const nodeId of nodesToRemove) {
-          console.log(`Removing duplicate text node: ${nodeId}`);
           canvas.nodes.delete(nodeId);
         }
         if (nodesToRemove.length > 0) {
@@ -1938,12 +1959,9 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
     return await this.extractCalloutsFromFile(activeFile, existingCache);
   }
   async extractAllCallouts() {
-    console.log("=== extractAllCallouts called ===");
     if (this.settings.enableFileCache) {
-      console.log("File cache is enabled, checking for existing cache...");
       const cache = await this.loadCalloutCache();
       if (cache && await this.isCacheValid(cache)) {
-        console.log(`\u2705 Using cached callouts: ${cache.callouts.length} items`);
         const sortedCallouts = [...cache.callouts].sort((a, b) => {
           const aModTime = a.calloutModifyTime || a.fileModTime || "1970-01-01 00:00:00";
           const bModTime = b.calloutModifyTime || b.fileModTime || "1970-01-01 00:00:00";
@@ -1951,20 +1969,14 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
         });
         return sortedCallouts;
       } else {
-        console.log("\u274C Cache invalid or not found, will scan files");
       }
     } else {
-      console.log("File cache is disabled");
     }
-    console.log("\u{1F4C1} Scanning all files for callouts...");
     const callouts = await this.scanAllCallouts();
     if (this.settings.enableFileCache) {
-      console.log("\u{1F4BE} Saving to cache...");
       const saveResult = await this.saveCalloutCache(callouts);
       if (saveResult) {
-        console.log(`\u2705 Saved ${callouts.length} callouts to cache`);
       } else {
-        console.log("\u274C Failed to save to cache");
       }
     }
     return callouts;
@@ -1990,13 +2002,10 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
     return callouts;
   }
   async refreshAllCallouts() {
-    console.log("Refreshing callouts - rescanning all files...");
     const callouts = await this.scanAllCallouts();
-    console.log("Analyzing canvas connections...");
     const calloutsWithLinks = await this.analyzeCanvasLinks(callouts);
     if (this.settings.enableFileCache) {
       await this.saveCalloutCache(calloutsWithLinks);
-      console.log(`Updated cache with ${calloutsWithLinks.length} callouts and their connections`);
     }
     return calloutsWithLinks;
   }
@@ -2015,7 +2024,7 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
     if (calloutID) {
       return `${filePath}:${calloutID}`;
     }
-    const tempId = `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const tempId = `temp-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
     return `${filePath}:${tempId}`;
   }
   async extractCalloutsFromFile(file, existingCache) {
@@ -2137,6 +2146,8 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
           calloutCreatedTime: creationTime,
           calloutModifyTime: modificationTime
         };
+        const outlinks = this.extractOutlinksFromContent(calloutItem.content, file.path, calloutID);
+        calloutItem.outlinks = outlinks;
         if (calloutID)
           calloutItem.calloutID = calloutID;
         if (hierarchy.length > 0) {
@@ -2147,6 +2158,39 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
       }
     }
     return callouts;
+  }
+  /**
+   * Extract outlinks from callout content
+   * Looks for patterns like [[#^calloutID]] or [[filename#^calloutID]]
+   */
+  extractOutlinksFromContent(content, currentFilePath, currentCalloutID) {
+    const outlinks = [];
+    const linkRegex = /\[\[([^#\]]*)(#\^([^\]]+))?\]\]/g;
+    let match;
+    let matchCount = 0;
+    const MAX_MATCHES = 100;
+    linkRegex.lastIndex = 0;
+    while ((match = linkRegex.exec(content)) !== null && matchCount < MAX_MATCHES) {
+      matchCount++;
+      const filename = match[1] || "";
+      const calloutID = match[3];
+      if (calloutID) {
+        let targetFilename;
+        if (!filename) {
+          targetFilename = currentFilePath;
+        } else {
+          targetFilename = filename.endsWith(".md") ? filename : `${filename}.md`;
+        }
+        outlinks.push([targetFilename, calloutID]);
+      }
+      if (match.index === linkRegex.lastIndex) {
+        linkRegex.lastIndex++;
+      }
+    }
+    if (matchCount >= MAX_MATCHES) {
+      console.error(`[ERROR] Potential infinite loop detected in extractOutlinksFromContent for ${currentFilePath}#^${currentCalloutID}`);
+    }
+    return outlinks;
   }
   // Cache management methods
   getCacheFilePath() {
@@ -2161,11 +2205,9 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
     }
     try {
       const cacheFilePath = this.getCacheFilePath();
-      console.log(`Attempting to load cache from: ${cacheFilePath}`);
       const adapter = this.app.vault.adapter;
       const exists = await adapter.exists(cacheFilePath);
       if (!exists) {
-        console.log("Cache file does not exist");
         return null;
       }
       const cacheContent = await adapter.read(cacheFilePath);
@@ -2217,15 +2259,12 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
         }
       }
       if (cache.version !== _CalloutOrganizerPlugin.CACHE_VERSION) {
-        console.log("Cache version mismatch, invalidating cache");
         return null;
       }
       const currentVaultPath = this.app.vault.getName() || "";
       if (cache.vaultPath !== currentVaultPath) {
-        console.log(`Vault path changed (${cache.vaultPath} != ${currentVaultPath}), invalidating cache`);
         return null;
       }
-      console.log(`\u2705 Successfully loaded ${cache.callouts.length} callouts from plugin folder cache`);
       return cache;
     } catch (error) {
       console.warn("Failed to load callout cache:", error);
@@ -2234,10 +2273,8 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
   }
   async saveCalloutCache(callouts) {
     if (!this.settings.enableFileCache) {
-      console.log("File cache is disabled, skipping save");
       return false;
     }
-    console.log(`Attempting to save ${callouts.length} callouts to cache...`);
     const saveOperation = async () => {
       try {
         const fileModTimes = {};
@@ -2269,14 +2306,12 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
         };
         const cacheFilePath = this.getCacheFilePath();
         const cacheContent = JSON.stringify(cache, null, 2);
-        console.log(`Saving cache to: ${cacheFilePath}`);
         const adapter = this.app.vault.adapter;
         const pluginDir = `.obsidian/plugins/${_CalloutOrganizerPlugin.PLUGIN_FOLDER}`;
         if (!await adapter.exists(pluginDir)) {
           await adapter.mkdir(pluginDir);
         }
         await adapter.write(cacheFilePath, cacheContent);
-        console.log("\u2705 Cache file saved successfully to plugin folder");
         return true;
       } catch (error) {
         console.error("Failed to save callout cache:", error);
@@ -2297,18 +2332,15 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
         const file = this.app.vault.getAbstractFileByPath(filePath);
         if (file instanceof import_obsidian.TFile) {
           if (file.stat.mtime > readableToTimestamp(cachedModTime)) {
-            console.log(`File ${filePath} has been modified, cache invalid`);
             return false;
           }
         } else {
-          console.log(`File ${filePath} no longer exists, cache invalid`);
           return false;
         }
       }
       const currentFiles = this.app.vault.getMarkdownFiles();
       for (const file of currentFiles) {
         if (!this.shouldSkipFile(file.path, true) && !cache.fileModTimes.hasOwnProperty(file.path)) {
-          console.log(`New file ${file.path} found, cache invalid`);
           return false;
         }
       }
@@ -2320,6 +2352,9 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
   }
   onunload() {
     this.app.workspace.detachLeavesOfType(VIEW_TYPE_CALLOUT_ORGANIZER);
+    if (this.originalErrorHandler !== null) {
+      window.onerror = this.originalErrorHandler;
+    }
     if (this.styleElement) {
       this.styleElement.remove();
       this.styleElement = null;
@@ -2345,7 +2380,7 @@ CalloutOrganizerPlugin.CALLOUT_REGEX = /^>\s*\[!([^\]]+)\]\s*(.*?)$/;
 CalloutOrganizerPlugin.BLOCK_ID_REGEX = /\^([\w-]+)\s*$/;
 CalloutOrganizerPlugin.CONTENT_EXTRACT_REGEX = /^>\s?/;
 // Cache constants
-CalloutOrganizerPlugin.CACHE_VERSION = "1.3";
+CalloutOrganizerPlugin.CACHE_VERSION = "1.4";
 CalloutOrganizerPlugin.PLUGIN_FOLDER = "callout-organizer";
 CalloutOrganizerPlugin.CACHE_FILENAME = "callouts.json";
 var CalloutOrganizerSettingTab = class extends import_obsidian.PluginSettingTab {
@@ -2371,13 +2406,11 @@ var CalloutOrganizerSettingTab = class extends import_obsidian.PluginSettingTab 
           const cacheFile = this.app.vault.getAbstractFileByPath(cacheFilePath);
           if (cacheFile && cacheFile instanceof import_obsidian.TFile) {
             await this.app.vault.delete(cacheFile);
-            console.log("Cache file deleted via Obsidian API");
           }
           const adapter = this.app.vault.adapter;
           const pluginCachePath = this.plugin.getCacheFilePath();
           if (await adapter.exists(pluginCachePath)) {
             await adapter.remove(pluginCachePath);
-            console.log("Plugin folder cache file also deleted");
           }
         } catch (error) {
           console.warn("Failed to delete cache file:", error);
@@ -2960,20 +2993,20 @@ var CalloutSelectorModal = class extends import_obsidian.Modal {
     const calloutsToShow = this.filteredCallouts.slice(0, maxResults);
     calloutsToShow.forEach((callout) => {
       const item = this.resultContainer.createDiv("callout-selector-item");
-      const typeTag = item.createEl("span", {
+      const _typeTag = item.createEl("span", {
         text: callout.type,
         cls: "callout-selector-type-tag"
       });
-      const title = item.createEl("div", {
+      const _title = item.createEl("div", {
         text: callout.title || "Untitled",
         cls: "callout-selector-title"
       });
-      const fileInfo = item.createEl("div", {
+      const _fileInfo = item.createEl("div", {
         text: `\u{1F4C4} ${callout.file}`,
         cls: "callout-selector-file"
       });
       if (callout.content) {
-        const preview = item.createEl("div", {
+        const _preview = item.createEl("div", {
           text: callout.content.slice(0, 100) + (callout.content.length > 100 ? "..." : ""),
           cls: "callout-selector-preview"
         });
