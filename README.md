@@ -36,6 +36,12 @@ A powerful plugin for organizing, searching, navigating, and citing callouts acr
 - **Auto Callout IDs**: Automatically adds callout IDs when dragging callouts
 - **Hide File Names**: Option to hide filenames in links using aliases (e.g., `[[file#^id|id]]`)
 
+### 🌐 Callout Connections (Beta)
+- **Bulk ID Generation**: Create IDs for ALL callouts in your vault at once
+- **Canvas File Generation**: Automatically creates canvas files for every callout
+- **Smart Processing**: Skips callouts that already have IDs and existing canvas files
+- **Progress Tracking**: Shows exactly how many callouts were processed
+
 ## Installation
 
 ### Install Manually
@@ -129,12 +135,12 @@ The plugin uses intelligent file caching to improve search performance:
 - **Cache Location**: Stored as `callouts.json` in the plugin folder (`.obsidian/plugins/callout-organizer/`)
 - **Auto-Invalidation**: Cache is automatically refreshed when files are modified
 - **Manual Refresh**: Use the refresh button in Search mode to force cache rebuild
-- **Cache Settings**: Can be disabled in plugin settings if needed
+- **Always Enabled**: File caching is permanently enabled for optimal performance
 
 **Cache Troubleshooting**:
 - If callouts are missing, try clicking the refresh button in Search mode
-- Check that "Enable file cache" is turned on in settings
 - Cache automatically rebuilds when files change, but manual refresh may be needed after major vault changes
+- The cache dramatically improves performance for large vaults with many callouts
 
 ## Settings
 
@@ -147,7 +153,10 @@ The plugin uses intelligent file caching to improve search performance:
 - **Excluded Folders**: Skip specific folders in vault-wide search
 - **Search Fields**: Enable/disable searching in different content areas
 - **Result Limits**: Control maximum number of search results
-- **File Cache**: Enable/disable file caching for faster search performance
+
+### Callout Connections (Beta)
+- **Open Callout Connections**: Enable bulk ID generation and canvas file creation
+- **Canvas Storage Folder**: Choose where canvas files are stored (default: "Callout Connections")
 
 ### Callout Customization
 - **Colors**: Customize colors for any callout type
@@ -183,6 +192,44 @@ The inspiration of this color scheme comes from Zotero and Bilibili.
 MIT License - see LICENSE file for details
 
 ## Changelog
+
+### Version 1.6.0
+- 🎉 **Major Feature Additions**:
+  - **Open Callout Connections**: New comprehensive system for managing callout relationships
+    - **Automatic ID Generation**: Creates unique IDs for ALL callouts using proven drag & drop method
+    - **Canvas File Generation**: Automatically creates canvas files for every callout in the vault
+    - **Smart ID Placement**: Follows proper Obsidian format (`> [!type] Title\n> Content\n> ^callout-id`)
+    - **Batch Processing**: Processes entire vault with detailed progress reporting
+    - **No Overwrites**: Intelligently skips callouts that already have IDs and existing canvas files
+- 🔧 **Enhanced Drag & Drop System**:
+  - **Fixed Critical Bug**: Resolved issue where drag & drop wasn't creating callout IDs in source files
+  - **Improved Timing**: Uses proper ondragend timing to prevent infinite loops and ensure reliable ID creation
+  - **Content-Based Matching**: Accurately identifies specific callouts by matching both type and content
+  - **Error Recovery**: Automatically resets callout ID if file modification fails
+  - **Cache Integration**: Seamlessly updates cache after successful ID creation
+- ⚙️ **Advanced Settings Management**:
+  - **Streamlined Options**: Removed unnecessary "Enable File Cache" option - caching now always enabled
+  - **Always-On Performance**: File caching permanently enabled with callouts.json storage for optimal speed
+  - **Simplified Graph Connections**: Removed "Graph Connection Depth" - now explores all connections for complete relationship mapping
+  - **Reorganized UI**: Moved canvas options to end and renamed to "Callout Connections (Beta)" for better organization
+  - **User-Friendly Warnings**: Added prominent warning notices for file-modifying features
+- 🎨 **Modern UI Design Overhaul**:
+  - **Enhanced Visual Hierarchy**: Improved spacing, padding, and layout throughout the interface
+  - **Better Button Styling**: Modern button designs with smooth animations and sophisticated hover effects
+  - **Loading Animations**: Added fadeIn animations and shimmer loading placeholders for better perceived performance
+  - **Improved Accessibility**: Proper focus states, keyboard navigation, and reduced motion support
+  - **Color Consistency**: Better integration with Obsidian's theme system across all UI elements
+- 🔧 **Technical Improvements**:
+  - **Content-Aware ID Placement**: Advanced algorithm to find exact callout matches by type and content
+  - **Duplicate Prevention**: Comprehensive checks for existing IDs in both inside and outside callout formats
+  - **Enhanced Error Handling**: Robust error recovery with informative user notifications
+  - **Canvas Color Integration**: Uses proper callout colors from user settings in generated canvas files
+  - **Consistent ID Generation**: Same 6-character alphanumeric ID format across all features
+- 🐛 **Bug Fixes & Stability**:
+  - **Corrected ID Format**: Fixed callout ID placement to be inside callout blocks with proper `>` prefix
+  - **Perfect Spacing**: IDs now placed immediately after content with no unwanted empty lines
+  - **Setting Persistence**: All settings properly save and load across plugin reloads
+  - **Reliable Canvas Generation**: Canvas files now use correct colors and dimensions from user preferences
 
 ### Version 1.5.0
 - 🎯 **Major Canvas Enhancement & Bug Fixes**:

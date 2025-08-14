@@ -409,6 +409,8 @@
     border-radius: 8px;
     border: 1px solid var(--background-modifier-border);
     animation: fadeIn 0.5s ease;
+    width: 100%;
+    box-sizing: border-box;
 }
 
 

@@ -38,11 +38,10 @@ var DEFAULT_SETTINGS = {
   searchInCalloutIds: true,
   searchInCalloutContent: true,
   maxSearchResults: 50,
-  // Cache settings
-  enableFileCache: true,
+  // Cache settings (always enabled)
   // Canvas settings
   canvasStorageFolder: "Callout Connections",
-  graphConnectionDepth: 2,
+  enableCalloutConnections: false,
   // Display options - show all by default
   showFilenames: true,
   showH1Headers: true,
@@ -506,14 +505,14 @@ var CalloutOrganizerView = class extends import_obsidian.ItemView {
       e.preventDefault();
       this.openFile(callout.file, callout.lineNumber, e.ctrlKey || e.metaKey);
     };
+    let pendingCalloutId = null;
     calloutEl.ondragstart = (e) => {
       if (e.dataTransfer) {
         let calloutID = callout.calloutID;
-        let needsNewId = false;
         if (!calloutID) {
           calloutID = this.generateCalloutId(callout);
           callout.calloutID = calloutID;
-          needsNewId = true;
+          pendingCalloutId = calloutID;
         }
         const filenameWithExt = callout.file.split("/").pop() || callout.file;
         const filename = filenameWithExt.replace(/\.md$/, "");
@@ -521,12 +520,23 @@ var CalloutOrganizerView = class extends import_obsidian.ItemView {
         e.dataTransfer.setData("text/plain", embedText);
         e.dataTransfer.effectAllowed = "copy";
         calloutEl.style.opacity = "0.5";
-        if (needsNewId && calloutID) {
-        }
       }
     };
     calloutEl.ondragend = () => {
       calloutEl.style.opacity = "1";
+      if (pendingCalloutId) {
+        setTimeout(async () => {
+          try {
+            await this.addCalloutIdToCallout(callout, pendingCalloutId);
+            await this.plugin.saveCalloutCache(this.callouts);
+            pendingCalloutId = null;
+          } catch (error) {
+            console.error("Error adding callout ID to file:", error);
+            callout.calloutID = void 0;
+            pendingCalloutId = null;
+          }
+        }, 100);
+      }
     };
     const header = calloutEl.createEl("div", { cls: "callout-organizer-header" });
     const displayTitle = callout.title || callout.type.charAt(0).toUpperCase() + callout.type.slice(1);
@@ -1271,6 +1281,170 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
     this.styleElement.textContent = css;
     document.head.appendChild(this.styleElement);
   }
+  async setupCalloutConnections() {
+    try {
+      const allCallouts = await this.extractAllCallouts();
+      let calloutsModified = 0;
+      let canvasFilesCreated = 0;
+      const canvasFolder = this.app.vault.getAbstractFileByPath(this.settings.canvasStorageFolder);
+      if (!canvasFolder) {
+        await this.app.vault.createFolder(this.settings.canvasStorageFolder);
+      }
+      for (const callout of allCallouts) {
+        if (!callout.calloutID) {
+          const newCalloutID = this.generateCalloutId(callout);
+          callout.calloutID = newCalloutID;
+          try {
+            await this.addCalloutIdToCallout(callout, newCalloutID);
+            calloutsModified++;
+          } catch (error) {
+            console.error("Error adding callout ID to file:", error);
+            callout.calloutID = void 0;
+            continue;
+          }
+        }
+        await this.createCanvasFileForCallout(callout);
+        canvasFilesCreated++;
+      }
+      if (calloutsModified > 0) {
+        await this.saveCalloutCache(allCallouts);
+      }
+      return {
+        totalCallouts: allCallouts.length,
+        calloutsModified,
+        canvasFilesCreated
+      };
+    } catch (error) {
+      console.error("Error setting up callout connections:", error);
+      throw error;
+    }
+  }
+  async createCanvasFileForCallout(callout) {
+    var _a;
+    try {
+      if (!callout.calloutID || !callout.file)
+        return;
+      const sourceFilename = ((_a = callout.file.split("/").pop()) == null ? void 0 : _a.replace(".md", "")) || "unknown";
+      const canvasFileName = `callout_${sourceFilename}_${callout.calloutID}.canvas`;
+      const canvasPath = `${this.settings.canvasStorageFolder}/${canvasFileName}`;
+      const existingFile = this.app.vault.getAbstractFileByPath(canvasPath);
+      if (existingFile)
+        return;
+      const mainNodeId = `node-${Date.now()}-main`;
+      const mainNodeWidth = callout.canvasWidth || 400;
+      const mainNodeHeight = callout.canvasHeight || 200;
+      const canvasData = {
+        nodes: [
+          {
+            id: mainNodeId,
+            type: "file",
+            file: callout.file,
+            subpath: `#^${callout.calloutID}`,
+            x: 0,
+            y: 0,
+            width: mainNodeWidth,
+            height: mainNodeHeight,
+            color: this.getCanvasColorForCallout(callout.type)
+            // Use the correct color method
+          }
+        ],
+        edges: []
+      };
+      await this.app.vault.create(canvasPath, JSON.stringify(canvasData, null, 2));
+    } catch (error) {
+      console.error("Error creating canvas file for callout:", error);
+    }
+  }
+  generateCalloutId(callout) {
+    const type = callout.type.toLowerCase();
+    const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
+    let randomChars = "";
+    for (let i = 0; i < 6; i++) {
+      randomChars += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return `${type}-${randomChars}`;
+  }
+  async addCalloutIdToCallout(callout, calloutID) {
+    try {
+      const file = this.app.vault.getAbstractFileByPath(callout.file);
+      if (!(file instanceof import_obsidian.TFile)) {
+        new import_obsidian.Notice(`File not found: ${callout.file}`);
+        return;
+      }
+      const content = await this.app.vault.read(file);
+      if (!content && content !== "") {
+        new import_obsidian.Notice(`Failed to read file: ${callout.file}`);
+        return;
+      }
+      const lines = content.split("\n");
+      let calloutStartLine = -1;
+      let calloutEndLine = -1;
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const calloutMatch = line.match(/^>\s*\[!([^\]]+)\]/);
+        if (calloutMatch) {
+          const foundType = calloutMatch[1].toLowerCase();
+          if (foundType === callout.type.toLowerCase()) {
+            let currentCalloutContent = "";
+            let currentCalloutEndLine = i;
+            for (let j = i; j < lines.length; j++) {
+              if (lines[j].startsWith(">")) {
+                const contentLine = lines[j].substring(1).trim();
+                if (contentLine && !contentLine.startsWith("[!") && !contentLine.startsWith("^")) {
+                  currentCalloutContent += contentLine + " ";
+                }
+                currentCalloutEndLine = j;
+              } else {
+                break;
+              }
+            }
+            currentCalloutContent = currentCalloutContent.trim();
+            const expectedContent = callout.content.replace(/\s+/g, " ").trim();
+            if (currentCalloutContent === expectedContent || currentCalloutContent.includes(expectedContent.substring(0, Math.min(50, expectedContent.length)))) {
+              calloutStartLine = i;
+              calloutEndLine = currentCalloutEndLine;
+              break;
+            }
+          }
+        }
+      }
+      if (calloutStartLine === -1) {
+        console.warn(`Could not find matching callout for type "${callout.type}" in ${callout.file}`);
+        return;
+      }
+      let hasExistingId = false;
+      for (let i = calloutStartLine; i <= calloutEndLine; i++) {
+        if (lines[i] && lines[i].match(/^>\s*\^/)) {
+          hasExistingId = true;
+          break;
+        }
+      }
+      if (!hasExistingId) {
+        for (let i = calloutEndLine + 1; i < Math.min(calloutEndLine + 3, lines.length); i++) {
+          if (lines[i] && lines[i].startsWith("^")) {
+            hasExistingId = true;
+            break;
+          }
+        }
+      }
+      if (hasExistingId) {
+        console.log(`Callout already has an ID, skipping: ${callout.file}`);
+        return;
+      }
+      let lastContentLine = calloutEndLine;
+      while (lastContentLine >= calloutStartLine && lines[lastContentLine].trim() === ">") {
+        lastContentLine--;
+      }
+      const insertIndex = lastContentLine + 1;
+      lines.splice(insertIndex, 0, `> ^${calloutID}`);
+      const newContent = lines.join("\n");
+      await this.app.vault.modify(file, newContent);
+      callout.calloutID = calloutID;
+    } catch (error) {
+      console.error("Error adding callout ID:", error);
+      new import_obsidian.Notice(`Failed to add ID to callout in ${callout.file}`);
+    }
+  }
   async activateCalloutOrganizer() {
     this.app.workspace.detachLeavesOfType(VIEW_TYPE_CALLOUT_ORGANIZER);
     const rightLeaf = this.app.workspace.getLeaf("split", "vertical");
@@ -1719,7 +1893,7 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
         }
       });
     };
-    discoverAtDepth(selectedCallout, 0, this.settings.graphConnectionDepth);
+    discoverAtDepth(selectedCallout, 0, 999);
     return { callouts: relatedCallouts, connections };
   }
   /**
@@ -2053,25 +2227,19 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
     return await this.extractCalloutsFromFile(activeFile, existingCache);
   }
   async extractAllCallouts() {
-    if (this.settings.enableFileCache) {
-      const cache = await this.loadCalloutCache();
-      if (cache && await this.isCacheValid(cache)) {
-        const sortedCallouts = [...cache.callouts].sort((a, b) => {
-          const aModTime = a.calloutModifyTime || a.fileModTime || "1970-01-01 00:00:00";
-          const bModTime = b.calloutModifyTime || b.fileModTime || "1970-01-01 00:00:00";
-          return readableToTimestamp(bModTime) - readableToTimestamp(aModTime);
-        });
-        return sortedCallouts;
-      } else {
-      }
-    } else {
+    const cache = await this.loadCalloutCache();
+    if (cache && await this.isCacheValid(cache)) {
+      const sortedCallouts = [...cache.callouts].sort((a, b) => {
+        const aModTime = a.calloutModifyTime || a.fileModTime || "1970-01-01 00:00:00";
+        const bModTime = b.calloutModifyTime || b.fileModTime || "1970-01-01 00:00:00";
+        return readableToTimestamp(bModTime) - readableToTimestamp(aModTime);
+      });
+      return sortedCallouts;
     }
     const callouts = await this.scanAllCallouts();
-    if (this.settings.enableFileCache) {
-      const saveResult = await this.saveCalloutCache(callouts);
-      if (saveResult) {
-      } else {
-      }
+    const saveResult = await this.saveCalloutCache(callouts);
+    if (saveResult) {
+    } else {
     }
     return callouts;
   }
@@ -2098,9 +2266,7 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
   async refreshAllCallouts() {
     const callouts = await this.scanAllCallouts();
     const calloutsWithLinks = await this.analyzeCanvasLinks(callouts);
-    if (this.settings.enableFileCache) {
-      await this.saveCalloutCache(calloutsWithLinks);
-    }
+    await this.saveCalloutCache(calloutsWithLinks);
     return calloutsWithLinks;
   }
   shouldSkipFile(filePath, searchMode = false) {
@@ -2291,9 +2457,6 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
     return `.obsidian/plugins/${_CalloutOrganizerPlugin.PLUGIN_FOLDER}/${_CalloutOrganizerPlugin.CACHE_FILENAME}`;
   }
   async loadCalloutCache() {
-    if (!this.settings.enableFileCache) {
-      return null;
-    }
     if (this.cacheOperationLock) {
       await this.cacheOperationLock;
     }
@@ -2366,9 +2529,6 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
     }
   }
   async saveCalloutCache(callouts) {
-    if (!this.settings.enableFileCache) {
-      return false;
-    }
     const saveOperation = async () => {
       try {
         const fileModTimes = {};
@@ -2418,7 +2578,7 @@ var _CalloutOrganizerPlugin = class extends import_obsidian.Plugin {
     return result;
   }
   async isCacheValid(cache) {
-    if (!cache || !this.settings.enableFileCache) {
+    if (!cache) {
       return false;
     }
     try {
@@ -2486,41 +2646,6 @@ var CalloutOrganizerSettingTab = class extends import_obsidian.PluginSettingTab 
     const { containerEl } = this;
     containerEl.empty();
     containerEl.createEl("h1", { text: "Callout Organizer Settings" });
-    containerEl.createEl("h3", { text: "Performance Options" });
-    const performanceContainer = containerEl.createEl("div", { cls: "callout-settings-indent" });
-    new import_obsidian.Setting(performanceContainer).setName("Enable File Cache").setDesc("Cache callouts in a file to improve startup performance. Disabling this will scan all files each time.").addToggle((toggle) => toggle.setValue(this.plugin.settings.enableFileCache).onChange(async (value) => {
-      this.plugin.settings.enableFileCache = value;
-      await this.plugin.saveSettings();
-      if (value) {
-        new import_obsidian.Notice("File cache enabled. Callouts will be cached for faster startup.");
-      } else {
-        new import_obsidian.Notice("File cache disabled. Plugin will scan files on each startup.");
-        try {
-          const cacheFilePath = this.plugin.getCacheFilePath();
-          const cacheFile = this.app.vault.getAbstractFileByPath(cacheFilePath);
-          if (cacheFile && cacheFile instanceof import_obsidian.TFile) {
-            await this.app.vault.delete(cacheFile);
-          }
-          const adapter = this.app.vault.adapter;
-          const pluginCachePath = this.plugin.getCacheFilePath();
-          if (await adapter.exists(pluginCachePath)) {
-            await adapter.remove(pluginCachePath);
-          }
-        } catch (error) {
-          console.warn("Failed to delete cache file:", error);
-        }
-      }
-    }));
-    containerEl.createEl("h3", { text: "Canvas Options" });
-    const canvasContainer = containerEl.createEl("div", { cls: "callout-settings-indent" });
-    new import_obsidian.Setting(canvasContainer).setName("Canvas Storage Folder").setDesc("Folder where callout canvas files will be stored (relative to vault root)").addText((text) => text.setPlaceholder("Callout Connections").setValue(this.plugin.settings.canvasStorageFolder).onChange(async (value) => {
-      this.plugin.settings.canvasStorageFolder = value || "Callout Connections";
-      await this.plugin.saveSettings();
-    }));
-    new import_obsidian.Setting(canvasContainer).setName("Graph Connection Depth").setDesc("How many levels of connections to show in graph view (1 = direct connections only, 2 = include connections of connected callouts, etc.)").addSlider((slider) => slider.setLimits(1, 5, 1).setValue(this.plugin.settings.graphConnectionDepth).setDynamicTooltip().onChange(async (value) => {
-      this.plugin.settings.graphConnectionDepth = value;
-      await this.plugin.saveSettings();
-    }));
     containerEl.createEl("h3", { text: "Display Options" });
     const displayContainer = containerEl.createEl("div", { cls: "callout-settings-indent" });
     new import_obsidian.Setting(displayContainer).setName("Show Filenames").setDesc("Display filenames in the breadcrumb navigation").addToggle((toggle) => toggle.setValue(this.plugin.settings.showFilenames).onChange(async (value) => {
@@ -2700,6 +2825,7 @@ var CalloutOrganizerSettingTab = class extends import_obsidian.PluginSettingTab 
       cls: "setting-item-description"
     });
     this.createDynamicCalloutColorSettings(colorsContainer);
+    this.addCanvasOptions(containerEl);
   }
   async createDynamicCalloutColorSettings(container) {
     const loadingEl = container.createEl("p", { text: "Scanning vault for callout types...", cls: "setting-item-description" });
@@ -3040,6 +3166,42 @@ var CalloutOrganizerSettingTab = class extends import_obsidian.PluginSettingTab 
   }
   getDefaultIconForCalloutType(type) {
     return this.plugin.getDefaultIconForCalloutType(type);
+  }
+  addCanvasOptions(containerEl) {
+    containerEl.createEl("h3", { text: "Callout Connections (Beta)" });
+    const canvasContainer = containerEl.createEl("div", { cls: "callout-settings-indent" });
+    const warningEl = canvasContainer.createEl("div", {
+      cls: "setting-item-description"
+    });
+    warningEl.style.cssText = `
+            background: var(--background-secondary);
+            border: 1px solid var(--background-modifier-border);
+            border-radius: 6px;
+            padding: 12px;
+            margin-bottom: 16px;
+            color: var(--text-normal);
+            font-weight: 500;
+        `;
+    warningEl.textContent = `\u26A0\uFE0F This feature will create IDs for ALL callouts (if missing) and generate canvas files for all callouts in the storage folder.`;
+    new import_obsidian.Setting(canvasContainer).setName("Open Callout Connections").setDesc("Enable callout connections feature for creating canvas files and managing callout relationships.").addToggle((toggle) => toggle.setValue(this.plugin.settings.enableCalloutConnections).onChange(async (value) => {
+      this.plugin.settings.enableCalloutConnections = value;
+      await this.plugin.saveSettings();
+      if (value) {
+        new import_obsidian.Notice("Enabling callout connections...");
+        try {
+          const result = await this.plugin.setupCalloutConnections();
+          new import_obsidian.Notice(`Callout connections enabled! Created IDs for ${result.calloutsModified} callouts and ${result.canvasFilesCreated} canvas files.`);
+        } catch (error) {
+          new import_obsidian.Notice("Error enabling callout connections. Check console for details.");
+        }
+      } else {
+        new import_obsidian.Notice("Callout connections disabled.");
+      }
+    }));
+    new import_obsidian.Setting(canvasContainer).setName("Canvas Storage Folder").setDesc("Folder where callout canvas files will be stored (relative to vault root)").addText((text) => text.setPlaceholder("Callout Connections").setValue(this.plugin.settings.canvasStorageFolder).onChange(async (value) => {
+      this.plugin.settings.canvasStorageFolder = value || "Callout Connections";
+      await this.plugin.saveSettings();
+    }));
   }
 };
 var CalloutSelectorModal = class extends import_obsidian.Modal {

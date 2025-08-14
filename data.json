@@ -6,9 +6,9 @@
   "searchInCalloutIds": true,
   "searchInCalloutContent": true,
   "maxSearchResults": 50,
-  "enableFileCache": true,
   "canvasStorageFolder": "Callout Connections",
-  "graphConnectionDepth": 2,
+  "enableCalloutConnections": true,
+  "betterCanvasEmbeddings": true,
   "showFilenames": true,
   "showH1Headers": true,
   "showH2Headers": true,
@@ -389,6 +389,8 @@
       "icon": "pencil"
     }
   },
+  "graphConnectionDepth": 3,
+  "enableFileCache": true,
   "disabledRelationships": [],
   "cacheFileName": "callouts.json",
   "searchInHeaders": true,

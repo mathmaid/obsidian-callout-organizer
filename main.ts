@@ -26,11 +26,10 @@ interface CalloutOrganizerSettings {
     searchInCalloutIds: boolean;
     searchInCalloutContent: boolean;
     maxSearchResults: number;
-    // Cache settings
-    enableFileCache: boolean;
+    // Cache settings (always enabled)
     // Canvas settings
     canvasStorageFolder: string;
-    graphConnectionDepth: number;
+    enableCalloutConnections: boolean;
     // Display options
     showFilenames: boolean;
     showH1Headers: boolean;
@@ -60,11 +59,10 @@ const DEFAULT_SETTINGS: CalloutOrganizerSettings = {
     searchInCalloutIds: true,
     searchInCalloutContent: true,
     maxSearchResults: 50,
-    // Cache settings
-    enableFileCache: true,
+    // Cache settings (always enabled)
     // Canvas settings
     canvasStorageFolder: 'Callout Connections',
-    graphConnectionDepth: 2,
+    enableCalloutConnections: false,
     // Display options - show all by default
     showFilenames: true,
     showH1Headers: true,
@@ -726,16 +724,17 @@ class CalloutOrganizerView extends ItemView {
         
         
         // Add drag functionality
+        let pendingCalloutId: string | null = null;
+        
         calloutEl.ondragstart = (e) => {
             if (e.dataTransfer) {
                 // Check if we need to generate a new callout ID
                 let calloutID = callout.calloutID;
-                let needsNewId = false;
                 
                 if (!calloutID) {
                     calloutID = this.generateCalloutId(callout);
                     callout.calloutID = calloutID;
-                    needsNewId = true;
+                    pendingCalloutId = calloutID; // Store for later addition to file
                 }
                 
                 // Create standard Obsidian embed format that canvas handles properly
@@ -750,23 +749,30 @@ class CalloutOrganizerView extends ItemView {
                 
                 // Add visual feedback during drag
                 calloutEl.style.opacity = '0.5';
-                
-                // TEMPORARILY DISABLED: Queue callout ID addition without blocking UI
-                // This was causing infinite loop when dragging callouts
-                if (needsNewId && calloutID) {
-                    // Would add callout ID (functionality temporarily disabled)
-                    // queueMicrotask(() => {
-                    //     this.addCalloutIdToCallout(callout, calloutID!).catch(error => {
-                    //         console.error('Error adding callout ID to file:', error);
-                    //     });
-                    // });
-                }
             }
         };
         
         calloutEl.ondragend = () => {
             // Restore opacity after drag
             calloutEl.style.opacity = '1';
+            
+            // Add callout ID to file after drag is complete (prevents infinite loop)
+            if (pendingCalloutId) {
+                // Use setTimeout to ensure this happens after the drag operation is fully complete
+                setTimeout(async () => {
+                    try {
+                        await this.addCalloutIdToCallout(callout, pendingCalloutId!);
+                        // Update cache after successful ID addition
+                        await this.plugin.saveCalloutCache(this.callouts);
+                        pendingCalloutId = null;
+                    } catch (error) {
+                        console.error('Error adding callout ID to file:', error);
+                        // Reset the callout ID if we failed to add it to the file
+                        callout.calloutID = undefined;
+                        pendingCalloutId = null;
+                    }
+                }, 100); // Small delay to ensure drag operation is complete
+            }
         };
         
         const header = calloutEl.createEl("div", { cls: "callout-organizer-header" });
@@ -1676,10 +1682,236 @@ export default class CalloutOrganizerPlugin extends Plugin {
 }`;
         }
         
+        
         this.styleElement.textContent = css;
         document.head.appendChild(this.styleElement);
     }
 
+    async setupCalloutConnections() {
+        try {
+            // Get all callouts from vault
+            const allCallouts = await this.extractAllCallouts();
+            let calloutsModified = 0;
+            let canvasFilesCreated = 0;
+            
+            // Create the canvas storage folder if it doesn't exist
+            const canvasFolder = this.app.vault.getAbstractFileByPath(this.settings.canvasStorageFolder);
+            if (!canvasFolder) {
+                await this.app.vault.createFolder(this.settings.canvasStorageFolder);
+            }
+            
+            // Process ALL callouts - generate IDs for those without and create canvas for all
+            for (const callout of allCallouts) {
+                // Generate callout ID if it doesn't exist using the same method as drag & drop
+                if (!callout.calloutID) {
+                    const newCalloutID = this.generateCalloutId(callout);
+                    callout.calloutID = newCalloutID;
+                    
+                    try {
+                        // Add the ID to the file using the same method as drag & drop
+                        await this.addCalloutIdToCallout(callout, newCalloutID);
+                        calloutsModified++;
+                    } catch (error) {
+                        console.error('Error adding callout ID to file:', error);
+                        // Reset the callout ID if we failed to add it to the file
+                        callout.calloutID = undefined;
+                        continue; // Skip creating canvas for this callout
+                    }
+                }
+                
+                // Create canvas file for this callout (now all callouts have IDs)
+                await this.createCanvasFileForCallout(callout);
+                canvasFilesCreated++;
+            }
+            
+            // Update cache with new callout IDs (same as drag & drop)
+            if (calloutsModified > 0) {
+                await this.saveCalloutCache(allCallouts);
+            }
+            
+            return {
+                totalCallouts: allCallouts.length,
+                calloutsModified: calloutsModified,
+                canvasFilesCreated: canvasFilesCreated
+            };
+            
+        } catch (error) {
+            console.error('Error setting up callout connections:', error);
+            throw error;
+        }
+    }
+    
+    async createCanvasFileForCallout(callout: CalloutItem) {
+        try {
+            if (!callout.calloutID || !callout.file) return;
+            
+            const sourceFilename = callout.file.split('/').pop()?.replace('.md', '') || 'unknown';
+            const canvasFileName = `callout_${sourceFilename}_${callout.calloutID}.canvas`;
+            const canvasPath = `${this.settings.canvasStorageFolder}/${canvasFileName}`;
+            
+            // Check if canvas file already exists
+            const existingFile = this.app.vault.getAbstractFileByPath(canvasPath);
+            if (existingFile) return; // Don't overwrite existing canvas files
+            
+            // Use the same canvas creation logic as "Open Callout Graphview"
+            const mainNodeId = `node-${Date.now()}-main`;
+            
+            // Use saved dimensions if available, otherwise use defaults
+            const mainNodeWidth = callout.canvasWidth || 400;
+            const mainNodeHeight = callout.canvasHeight || 200;
+            
+            const canvasData = {
+                nodes: [
+                    {
+                        id: mainNodeId,
+                        type: "file",
+                        file: callout.file,
+                        subpath: `#^${callout.calloutID}`,
+                        x: 0,
+                        y: 0,
+                        width: mainNodeWidth,
+                        height: mainNodeHeight,
+                        color: this.getCanvasColorForCallout(callout.type) // Use the correct color method
+                    }
+                ],
+                edges: []
+            };
+            
+            // Create the canvas file
+            await this.app.vault.create(canvasPath, JSON.stringify(canvasData, null, 2));
+            
+        } catch (error) {
+            console.error('Error creating canvas file for callout:', error);
+        }
+    }
+
+    generateCalloutId(callout: CalloutItem): string {
+        // Generate 6-character random alphanumeric ID in format: type-******
+        const type = callout.type.toLowerCase();
+        const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+        let randomChars = '';
+        for (let i = 0; i < 6; i++) {
+            randomChars += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+        return `${type}-${randomChars}`;
+    }
+
+    async addCalloutIdToCallout(callout: CalloutItem, calloutID: string): Promise<void> {
+        try {
+            const file = this.app.vault.getAbstractFileByPath(callout.file);
+            if (!(file instanceof TFile)) {
+                new Notice(`File not found: ${callout.file}`);
+                return;
+            }
+
+            const content = await this.app.vault.read(file);
+            if (!content && content !== '') {
+                new Notice(`Failed to read file: ${callout.file}`);
+                return;
+            }
+            const lines = content.split('\n');
+            
+            // Find the specific callout by matching type and content
+            let calloutStartLine = -1;
+            let calloutEndLine = -1;
+            
+            // Search for callouts that match the type and content
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i];
+                
+                // Check if this is a callout header with matching type
+                const calloutMatch = line.match(/^>\s*\[!([^\]]+)\]/);
+                if (calloutMatch) {
+                    const foundType = calloutMatch[1].toLowerCase();
+                    
+                    // Check if type matches
+                    if (foundType === callout.type.toLowerCase()) {
+                        // Found a potential match, now check the content
+                        let currentCalloutContent = '';
+                        let currentCalloutEndLine = i;
+                        
+                        // Collect the callout content
+                        for (let j = i; j < lines.length; j++) {
+                            if (lines[j].startsWith('>')) {
+                                // Remove the '>' prefix and trim
+                                const contentLine = lines[j].substring(1).trim();
+                                if (contentLine && !contentLine.startsWith('[!') && !contentLine.startsWith('^')) {
+                                    currentCalloutContent += contentLine + ' ';
+                                }
+                                currentCalloutEndLine = j;
+                            } else {
+                                // End of callout - stop at first non-'>' line
+                                break;
+                            }
+                        }
+                        
+                        // Clean up the content for comparison
+                        currentCalloutContent = currentCalloutContent.trim();
+                        const expectedContent = callout.content.replace(/\s+/g, ' ').trim();
+                        
+                        // Check if content matches (allow for some flexibility in whitespace)
+                        if (currentCalloutContent === expectedContent || 
+                            currentCalloutContent.includes(expectedContent.substring(0, Math.min(50, expectedContent.length)))) {
+                            calloutStartLine = i;
+                            calloutEndLine = currentCalloutEndLine;
+                            break;
+                        }
+                    }
+                }
+            }
+            
+            if (calloutStartLine === -1) {
+                console.warn(`Could not find matching callout for type "${callout.type}" in ${callout.file}`);
+                return;
+            }
+            
+            // Check if this callout already has an ID (check both inside and outside the callout)
+            let hasExistingId = false;
+            
+            // Check inside the callout for > ^id format
+            for (let i = calloutStartLine; i <= calloutEndLine; i++) {
+                if (lines[i] && lines[i].match(/^>\s*\^/)) {
+                    hasExistingId = true;
+                    break;
+                }
+            }
+            
+            // Also check outside the callout for ^id format
+            if (!hasExistingId) {
+                for (let i = calloutEndLine + 1; i < Math.min(calloutEndLine + 3, lines.length); i++) {
+                    if (lines[i] && lines[i].startsWith('^')) {
+                        hasExistingId = true;
+                        break;
+                    }
+                }
+            }
+            
+            if (hasExistingId) {
+                console.log(`Callout already has an ID, skipping: ${callout.file}`);
+                return;
+            }
+            
+            // Insert the ID INSIDE the callout (with > prefix) immediately after the last content line
+            // Find the actual last line with content (skip any existing empty > lines)
+            let lastContentLine = calloutEndLine;
+            while (lastContentLine >= calloutStartLine && lines[lastContentLine].trim() === '>') {
+                lastContentLine--;
+            }
+            
+            const insertIndex = lastContentLine + 1;
+            lines.splice(insertIndex, 0, `> ^${calloutID}`);
+            
+            const newContent = lines.join('\n');
+            await this.app.vault.modify(file, newContent);
+            
+            // Update the callout object
+            callout.calloutID = calloutID;
+            
+        } catch (error) {
+            console.error('Error adding callout ID:', error);
+            new Notice(`Failed to add ID to callout in ${callout.file}`);
+        }
+    }
 
     async activateCalloutOrganizer() {
         this.app.workspace.detachLeavesOfType(VIEW_TYPE_CALLOUT_ORGANIZER);
@@ -2292,8 +2524,8 @@ export default class CalloutOrganizerPlugin extends Plugin {
             });
         };
         
-        // Start discovery from the selected callout
-        discoverAtDepth(selectedCallout, 0, this.settings.graphConnectionDepth);
+        // Start discovery from the selected callout - explore all connections
+        discoverAtDepth(selectedCallout, 0, 999); // High depth to explore all connections
         
         return { callouts: relatedCallouts, connections };
     }
@@ -2787,38 +3019,28 @@ export default class CalloutOrganizerPlugin extends Plugin {
         // Extract all callouts from vault files
         
         // Try to load from cache first
-        if (this.settings.enableFileCache) {
-            // Try to load from cache first
-            const cache = await this.loadCalloutCache();
-            if (cache && await this.isCacheValid(cache)) {
-                // Using cached callouts
-                // Sort callouts by modification time (recent first) for search mode
-                const sortedCallouts = [...cache.callouts].sort((a, b) => {
-                    const aModTime = a.calloutModifyTime || a.fileModTime || '1970-01-01 00:00:00';
-                    const bModTime = b.calloutModifyTime || b.fileModTime || '1970-01-01 00:00:00';
-                    return readableToTimestamp(bModTime) - readableToTimestamp(aModTime);
-                });
-                return sortedCallouts;
-            } else {
-                // Cache invalid or not found, will scan files
-            }
-        } else {
-            // File cache is disabled
+        const cache = await this.loadCalloutCache();
+        if (cache && await this.isCacheValid(cache)) {
+            // Using cached callouts
+            // Sort callouts by modification time (recent first) for search mode
+            const sortedCallouts = [...cache.callouts].sort((a, b) => {
+                const aModTime = a.calloutModifyTime || a.fileModTime || '1970-01-01 00:00:00';
+                const bModTime = b.calloutModifyTime || b.fileModTime || '1970-01-01 00:00:00';
+                return readableToTimestamp(bModTime) - readableToTimestamp(aModTime);
+            });
+            return sortedCallouts;
         }
 
         // Cache miss or invalid, scan all files
         // Scanning all files for callouts
         const callouts = await this.scanAllCallouts();
         
-        // Save to cache if enabled
-        if (this.settings.enableFileCache) {
-            // Saving to cache
-            const saveResult = await this.saveCalloutCache(callouts);
-            if (saveResult) {
-                // Successfully saved callouts to cache
-            } else {
-                // Failed to save to cache
-            }
+        // Save to cache
+        const saveResult = await this.saveCalloutCache(callouts);
+        if (saveResult) {
+            // Successfully saved callouts to cache
+        } else {
+            // Failed to save to cache
         }
 
         return callouts;
@@ -2862,10 +3084,8 @@ export default class CalloutOrganizerPlugin extends Plugin {
         const calloutsWithLinks = await this.analyzeCanvasLinks(callouts);
         
         // Update cache
-        if (this.settings.enableFileCache) {
-            await this.saveCalloutCache(calloutsWithLinks);
-            // Updated cache with callouts and their connections
-        }
+        await this.saveCalloutCache(calloutsWithLinks);
+        // Updated cache with callouts and their connections
 
         return calloutsWithLinks;
     }
@@ -3144,9 +3364,6 @@ export default class CalloutOrganizerPlugin extends Plugin {
     }
 
     async loadCalloutCache(): Promise<CalloutCache | null> {
-        if (!this.settings.enableFileCache) {
-            return null;
-        }
 
         // Wait for any ongoing cache operations to complete
         if (this.cacheOperationLock) {
@@ -3248,10 +3465,6 @@ export default class CalloutOrganizerPlugin extends Plugin {
     }
 
     async saveCalloutCache(callouts: CalloutItem[]): Promise<boolean> {
-        if (!this.settings.enableFileCache) {
-            // File cache is disabled, skipping save
-            return false;
-        }
 
         // Attempting to save callouts to cache
 
@@ -3323,7 +3536,7 @@ export default class CalloutOrganizerPlugin extends Plugin {
     }
 
     async isCacheValid(cache: CalloutCache): Promise<boolean> {
-        if (!cache || !this.settings.enableFileCache) {
+        if (!cache) {
             return false;
         }
 
@@ -3410,76 +3623,7 @@ class CalloutOrganizerSettingTab extends PluginSettingTab {
         // Use h1 to match Obsidian's standard settings hierarchy
         containerEl.createEl('h1', {text: 'Callout Organizer Settings'});
 
-        // Performance Options
-        containerEl.createEl('h3', {text: 'Performance Options'});
 
-        const performanceContainer = containerEl.createEl('div', {cls: 'callout-settings-indent'});
-
-        new Setting(performanceContainer)
-            .setName('Enable File Cache')
-            .setDesc('Cache callouts in a file to improve startup performance. Disabling this will scan all files each time.')
-            .addToggle(toggle => toggle
-                .setValue(this.plugin.settings.enableFileCache)
-                .onChange(async (value) => {
-                    this.plugin.settings.enableFileCache = value;
-                    await this.plugin.saveSettings();
-                    
-                    if (value) {
-                        new Notice('File cache enabled. Callouts will be cached for faster startup.');
-                    } else {
-                        new Notice('File cache disabled. Plugin will scan files on each startup.');
-                        
-                        // Clean up existing cache file if it exists
-                        try {
-                            const cacheFilePath = this.plugin.getCacheFilePath();
-                            const cacheFile = this.app.vault.getAbstractFileByPath(cacheFilePath);
-                            
-                            if (cacheFile && cacheFile instanceof TFile) {
-                                await this.app.vault.delete(cacheFile);
-                                // Cache file deleted
-                            }
-                            
-                            // Also try to clean up from plugin folder using Obsidian adapter
-                            const adapter = this.app.vault.adapter;
-                            const pluginCachePath = this.plugin.getCacheFilePath();
-                            
-                            if (await adapter.exists(pluginCachePath)) {
-                                await adapter.remove(pluginCachePath);
-                                // Plugin folder cache file also deleted
-                            }
-                        } catch (error) {
-                            console.warn('Failed to delete cache file:', error);
-                        }
-                    }
-                }));
-
-        // Canvas Options
-        containerEl.createEl('h3', {text: 'Canvas Options'});
-        
-        const canvasContainer = containerEl.createEl('div', {cls: 'callout-settings-indent'});
-        
-        new Setting(canvasContainer)
-            .setName('Canvas Storage Folder')
-            .setDesc('Folder where callout canvas files will be stored (relative to vault root)')
-            .addText(text => text
-                .setPlaceholder('Callout Connections')
-                .setValue(this.plugin.settings.canvasStorageFolder)
-                .onChange(async (value) => {
-                    this.plugin.settings.canvasStorageFolder = value || 'Callout Connections';
-                    await this.plugin.saveSettings();
-                }));
-
-        new Setting(canvasContainer)
-            .setName('Graph Connection Depth')
-            .setDesc('How many levels of connections to show in graph view (1 = direct connections only, 2 = include connections of connected callouts, etc.)')
-            .addSlider(slider => slider
-                .setLimits(1, 5, 1)
-                .setValue(this.plugin.settings.graphConnectionDepth)
-                .setDynamicTooltip()
-                .onChange(async (value) => {
-                    this.plugin.settings.graphConnectionDepth = value;
-                    await this.plugin.saveSettings();
-                }));
 
         containerEl.createEl('h3', {text: 'Display Options'});
 
@@ -3821,6 +3965,9 @@ class CalloutOrganizerSettingTab extends PluginSettingTab {
 
         // Create simplified color settings for detected callout types
         this.createDynamicCalloutColorSettings(colorsContainer);
+        
+        // Add canvas options at the end
+        this.addCanvasOptions(containerEl);
     }
 
     private async createDynamicCalloutColorSettings(container: HTMLElement) {
@@ -4079,6 +4226,63 @@ class CalloutOrganizerSettingTab extends PluginSettingTab {
     getDefaultIconForCalloutType(type: string): string {
         // Use same defaults as main plugin method for consistency  
         return this.plugin.getDefaultIconForCalloutType(type);
+    }
+
+    private addCanvasOptions(containerEl: HTMLElement) {
+        // Callout Connections (Beta)
+        containerEl.createEl('h3', {text: 'Callout Connections (Beta)'});
+        
+        const canvasContainer = containerEl.createEl('div', {cls: 'callout-settings-indent'});
+        
+        // Add warning notice
+        const warningEl = canvasContainer.createEl('div', {
+            cls: 'setting-item-description',
+        });
+        warningEl.style.cssText = `
+            background: var(--background-secondary);
+            border: 1px solid var(--background-modifier-border);
+            border-radius: 6px;
+            padding: 12px;
+            margin-bottom: 16px;
+            color: var(--text-normal);
+            font-weight: 500;
+        `;
+        warningEl.textContent = `⚠️ This feature will create IDs for ALL callouts (if missing) and generate canvas files for all callouts in the storage folder.`;
+        
+        new Setting(canvasContainer)
+            .setName('Open Callout Connections')
+            .setDesc('Enable callout connections feature for creating canvas files and managing callout relationships.')
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.enableCalloutConnections)
+                .onChange(async (value) => {
+                    this.plugin.settings.enableCalloutConnections = value;
+                    await this.plugin.saveSettings();
+                    
+                    if (value) {
+                        // Enable callout connections
+                        new Notice('Enabling callout connections...');
+                        try {
+                            const result = await this.plugin.setupCalloutConnections();
+                            new Notice(`Callout connections enabled! Created IDs for ${result.calloutsModified} callouts and ${result.canvasFilesCreated} canvas files.`);
+                        } catch (error) {
+                            new Notice('Error enabling callout connections. Check console for details.');
+                        }
+                    } else {
+                        new Notice('Callout connections disabled.');
+                    }
+                }));
+        
+
+        new Setting(canvasContainer)
+            .setName('Canvas Storage Folder')
+            .setDesc('Folder where callout canvas files will be stored (relative to vault root)')
+            .addText(text => text
+                .setPlaceholder('Callout Connections')
+                .setValue(this.plugin.settings.canvasStorageFolder)
+                .onChange(async (value) => {
+                    this.plugin.settings.canvasStorageFolder = value || 'Callout Connections';
+                    await this.plugin.saveSettings();
+                }));
     }
 }
 
