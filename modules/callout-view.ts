@@ -368,8 +368,8 @@ export class CalloutOrganizerView extends ItemView {
 
     // Canvas integration method
     async openCalloutCanvas(callout: CalloutItem) {
-        if (this.plugin.createCalloutGraphCanvas) {
-            await this.plugin.createCalloutGraphCanvas(callout);
+        if (this.plugin.openCalloutCanvas) {
+            await this.plugin.openCalloutCanvas(callout);
         }
     }
 

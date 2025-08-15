@@ -7221,8 +7221,8 @@ var CalloutOrganizerView = class extends import_obsidian2.ItemView {
   }
   // Canvas integration method
   async openCalloutCanvas(callout) {
-    if (this.plugin.createCalloutGraphCanvas) {
-      await this.plugin.createCalloutGraphCanvas(callout);
+    if (this.plugin.openCalloutCanvas) {
+      await this.plugin.openCalloutCanvas(callout);
     }
   }
   async renderCallouts(container) {
@@ -7862,31 +7862,67 @@ var CalloutOrganizerSettingTab = class extends import_obsidian4.PluginSettingTab
       const builtinTypes = sortedTypes.filter((type) => this.plugin.isBuiltinCalloutType(type));
       const userTypes = sortedTypes.filter((type) => !this.plugin.isBuiltinCalloutType(type));
       if (builtinTypes.length > 0) {
-        container.createEl("h5", { text: "Built-in Obsidian Callouts" });
-        container.createEl("p", {
-          text: `${builtinTypes.length} built-in callout types. Reset button restores Obsidian defaults.`,
-          cls: "setting-item-description"
-        });
+        const builtinSection = this.createCollapsibleSection(
+          container,
+          "Built-in Obsidian Callouts",
+          `${builtinTypes.length} built-in callout types. Reset button restores Obsidian defaults.`,
+          "builtin-callouts"
+        );
         for (const type of builtinTypes) {
           const colors = this.plugin.settings.calloutColors[type];
-          this.createCalloutSetting(container, type, colors, true);
+          this.createCalloutSetting(builtinSection.content, type, colors, true);
         }
       }
       if (userTypes.length > 0) {
-        container.createEl("h5", { text: "Custom Callouts" });
-        container.createEl("p", {
-          text: `${userTypes.length} custom callout types. Reset button sets to note callout defaults.`,
-          cls: "setting-item-description"
-        });
+        const customSection = this.createCollapsibleSection(
+          container,
+          "Custom Callouts",
+          `${userTypes.length} custom callout types. Reset button sets to note callout defaults.`,
+          "custom-callouts"
+        );
         for (const type of userTypes) {
           const colors = this.plugin.settings.calloutColors[type];
-          this.createCalloutSetting(container, type, colors, false);
+          this.createCalloutSetting(customSection.content, type, colors, false);
         }
       }
     } catch (error) {
       loadingEl.textContent = "Error scanning vault for callouts.";
       console.error("Error scanning for callouts:", error);
     }
+  }
+  createCollapsibleSection(container, title, description, sectionId) {
+    const sectionContainer = container.createDiv({ cls: "callout-collapsible-section" });
+    const header = sectionContainer.createDiv({ cls: "callout-section-header" });
+    const headerButton = header.createEl("button", {
+      cls: "callout-section-toggle",
+      attr: { "aria-expanded": "true" }
+    });
+    const chevron = headerButton.createEl("span", { cls: "callout-section-chevron" });
+    chevron.innerHTML = "\u25BC";
+    headerButton.createEl("h5", { text: title, cls: "callout-section-title" });
+    const contentContainer = sectionContainer.createDiv({ cls: "callout-section-content" });
+    contentContainer.createEl("p", {
+      text: description,
+      cls: "setting-item-description"
+    });
+    headerButton.addEventListener("click", () => {
+      const isExpanded = headerButton.getAttribute("aria-expanded") === "true";
+      const newState = !isExpanded;
+      headerButton.setAttribute("aria-expanded", newState.toString());
+      contentContainer.style.display = newState ? "block" : "none";
+      chevron.innerHTML = newState ? "\u25BC" : "\u25B6";
+      localStorage.setItem(`callout-organizer-${sectionId}-expanded`, newState.toString());
+    });
+    const savedState = localStorage.getItem(`callout-organizer-${sectionId}-expanded`);
+    if (savedState === "false") {
+      headerButton.setAttribute("aria-expanded", "false");
+      contentContainer.style.display = "none";
+      chevron.innerHTML = "\u25B6";
+    }
+    return {
+      container: sectionContainer,
+      content: contentContainer
+    };
   }
   createCalloutSetting(container, type, colors, isBuiltin) {
     const setting = new import_obsidian4.Setting(container).setName(`${type.charAt(0).toUpperCase() + type.slice(1)} Callout`);
@@ -8991,7 +9027,104 @@ var CalloutOrganizerPlugin = class extends import_obsidian6.Plugin {
     return this.calloutParser.generateCalloutId(callout);
   }
   async addCalloutIdToCallout(callout, calloutID) {
-    console.log(`Would add callout ID ${calloutID} to callout in ${callout.file} at line ${callout.lineNumber}`);
+    try {
+      const file = this.app.vault.getAbstractFileByPath(callout.file);
+      if (!(file instanceof import_obsidian6.TFile)) {
+        console.error(`File not found: ${callout.file}`);
+        return;
+      }
+      const content = await this.app.vault.read(file);
+      if (!content && content !== "") {
+        console.error(`Failed to read file: ${callout.file}`);
+        return;
+      }
+      const lines = content.split("\n");
+      let calloutStartLine = -1;
+      let calloutEndLine = -1;
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const calloutMatch = line.match(/^>\s*\[!([^\]]+)\]/);
+        if (calloutMatch) {
+          const foundType = calloutMatch[1].toLowerCase();
+          if (foundType === callout.type.toLowerCase()) {
+            let currentCalloutContent = "";
+            let currentCalloutEndLine = i;
+            for (let j = i; j < lines.length; j++) {
+              if (lines[j].startsWith(">")) {
+                const contentLine = lines[j].substring(1).trim();
+                if (contentLine && !contentLine.startsWith("[!") && !contentLine.startsWith("^")) {
+                  currentCalloutContent += contentLine + " ";
+                }
+                currentCalloutEndLine = j;
+              } else {
+                break;
+              }
+            }
+            currentCalloutContent = currentCalloutContent.trim();
+            const expectedContent = callout.content.replace(/\s+/g, " ").trim();
+            if (currentCalloutContent === expectedContent || currentCalloutContent.includes(expectedContent.substring(0, Math.min(50, expectedContent.length)))) {
+              calloutStartLine = i;
+              calloutEndLine = currentCalloutEndLine;
+              break;
+            }
+          }
+        }
+      }
+      if (calloutStartLine === -1) {
+        console.warn(`Could not find matching callout for type "${callout.type}" in ${callout.file}`);
+        return;
+      }
+      let hasExistingId = false;
+      for (let i = calloutStartLine; i <= calloutEndLine; i++) {
+        if (lines[i] && lines[i].match(/^>\s*\^/)) {
+          hasExistingId = true;
+          break;
+        }
+      }
+      if (!hasExistingId) {
+        for (let i = calloutEndLine + 1; i < Math.min(calloutEndLine + 3, lines.length); i++) {
+          if (lines[i] && lines[i].startsWith("^")) {
+            hasExistingId = true;
+            break;
+          }
+        }
+      }
+      if (hasExistingId) {
+        console.log(`Callout already has an ID, skipping: ${callout.file}`);
+        return;
+      }
+      let lastContentLine = calloutEndLine;
+      while (lastContentLine >= calloutStartLine && lines[lastContentLine].trim() === ">") {
+        lastContentLine--;
+      }
+      const insertIndex = lastContentLine + 1;
+      lines.splice(insertIndex, 0, `> ^${calloutID}`);
+      const newContent = lines.join("\n");
+      await this.app.vault.modify(file, newContent);
+      callout.calloutID = calloutID;
+    } catch (error) {
+      console.error("Error adding callout ID:", error);
+    }
+  }
+  async openCalloutCanvas(callout) {
+    try {
+      if (!callout.calloutID) {
+        const newCalloutID = this.generateCalloutId(callout);
+        callout.calloutID = newCalloutID;
+        try {
+          await this.addCalloutIdToCallout(callout, newCalloutID);
+          const allCallouts = await this.extractAllCallouts();
+          await this.saveCalloutCache(allCallouts);
+        } catch (error) {
+          console.error("Error adding callout ID to file:", error);
+          callout.calloutID = void 0;
+          return;
+        }
+      }
+      await this.createCalloutGraphCanvas(callout);
+    } catch (error) {
+      console.error("Error opening callout canvas:", error);
+    }
   }
   async createCalloutGraphCanvas(callout) {
     return this.canvasHandler.createCalloutGraphCanvas(callout, () => this.extractAllCallouts());

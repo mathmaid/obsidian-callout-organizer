@@ -1,4 +1,4 @@
-import { App, Plugin, WorkspaceLeaf, TFile } from 'obsidian';
+import { App, Plugin, WorkspaceLeaf, TFile, Notice } from 'obsidian';
 
 // Import our modularized components
 import { CalloutOrganizerSettings, CalloutItem, CalloutCache } from './modules/types';
@@ -324,9 +324,148 @@ export default class CalloutOrganizerPlugin extends Plugin {
     }
 
     async addCalloutIdToCallout(callout: CalloutItem, calloutID: string): Promise<void> {
-        // Basic implementation - this would need to be enhanced to actually modify the file
-        console.log(`Would add callout ID ${calloutID} to callout in ${callout.file} at line ${callout.lineNumber}`);
-        // TODO: Implement actual file modification logic
+        try {
+            const file = this.app.vault.getAbstractFileByPath(callout.file);
+            if (!(file instanceof TFile)) {
+                console.error(`File not found: ${callout.file}`);
+                return;
+            }
+
+            const content = await this.app.vault.read(file);
+            if (!content && content !== '') {
+                console.error(`Failed to read file: ${callout.file}`);
+                return;
+            }
+            const lines = content.split('\n');
+            
+            // Find the specific callout by matching type and content
+            let calloutStartLine = -1;
+            let calloutEndLine = -1;
+            
+            // Search for callouts that match the type and content
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i];
+                
+                // Check if this is a callout header with matching type
+                const calloutMatch = line.match(/^>\s*\[!([^\]]+)\]/);
+                if (calloutMatch) {
+                    const foundType = calloutMatch[1].toLowerCase();
+                    
+                    // Check if type matches
+                    if (foundType === callout.type.toLowerCase()) {
+                        // Found a potential match, now check the content
+                        let currentCalloutContent = '';
+                        let currentCalloutEndLine = i;
+                        
+                        // Collect the callout content
+                        for (let j = i; j < lines.length; j++) {
+                            if (lines[j].startsWith('>')) {
+                                // Remove the '>' prefix and trim
+                                const contentLine = lines[j].substring(1).trim();
+                                if (contentLine && !contentLine.startsWith('[!') && !contentLine.startsWith('^')) {
+                                    currentCalloutContent += contentLine + ' ';
+                                }
+                                currentCalloutEndLine = j;
+                            } else {
+                                // End of callout - stop at first non-'>' line
+                                break;
+                            }
+                        }
+                        
+                        // Clean up the content for comparison
+                        currentCalloutContent = currentCalloutContent.trim();
+                        const expectedContent = callout.content.replace(/\s+/g, ' ').trim();
+                        
+                        // Check if content matches (allow for some flexibility in whitespace)
+                        if (currentCalloutContent === expectedContent || 
+                            currentCalloutContent.includes(expectedContent.substring(0, Math.min(50, expectedContent.length)))) {
+                            calloutStartLine = i;
+                            calloutEndLine = currentCalloutEndLine;
+                            break;
+                        }
+                    }
+                }
+            }
+            
+            if (calloutStartLine === -1) {
+                console.warn(`Could not find matching callout for type "${callout.type}" in ${callout.file}`);
+                return;
+            }
+            
+            // Check if this callout already has an ID (check both inside and outside the callout)
+            let hasExistingId = false;
+            
+            // Check inside the callout for > ^id format
+            for (let i = calloutStartLine; i <= calloutEndLine; i++) {
+                if (lines[i] && lines[i].match(/^>\s*\^/)) {
+                    hasExistingId = true;
+                    break;
+                }
+            }
+            
+            // Also check outside the callout for ^id format
+            if (!hasExistingId) {
+                for (let i = calloutEndLine + 1; i < Math.min(calloutEndLine + 3, lines.length); i++) {
+                    if (lines[i] && lines[i].startsWith('^')) {
+                        hasExistingId = true;
+                        break;
+                    }
+                }
+            }
+            
+            if (hasExistingId) {
+                console.log(`Callout already has an ID, skipping: ${callout.file}`);
+                return;
+            }
+            
+            // Insert the ID INSIDE the callout (with > prefix) immediately after the last content line
+            // Find the actual last line with content (skip any existing empty > lines)
+            let lastContentLine = calloutEndLine;
+            while (lastContentLine >= calloutStartLine && lines[lastContentLine].trim() === '>') {
+                lastContentLine--;
+            }
+            
+            const insertIndex = lastContentLine + 1;
+            lines.splice(insertIndex, 0, `> ^${calloutID}`);
+            
+            const newContent = lines.join('\n');
+            await this.app.vault.modify(file, newContent);
+            
+            // Update the callout object
+            callout.calloutID = calloutID;
+            
+        } catch (error) {
+            console.error('Error adding callout ID:', error);
+        }
+    }
+
+    async openCalloutCanvas(callout: CalloutItem): Promise<void> {
+        try {
+            // Generate callout ID if it doesn't exist
+            if (!callout.calloutID) {
+                const newCalloutID = this.generateCalloutId(callout);
+                callout.calloutID = newCalloutID;
+                
+                try {
+                    // Add the ID to the file
+                    await this.addCalloutIdToCallout(callout, newCalloutID);
+                    // Update cache after successful ID addition - get all callouts to save properly
+                    const allCallouts = await this.extractAllCallouts();
+                    await this.saveCalloutCache(allCallouts);
+                } catch (error) {
+                    console.error('Error adding callout ID to file:', error);
+                    // Reset the callout ID if we failed to add it to the file
+                    callout.calloutID = undefined;
+                    return;
+                }
+            }
+
+            // Use comprehensive canvas generation with relationship analysis
+            await this.createCalloutGraphCanvas(callout);
+            
+        } catch (error) {
+            console.error('Error opening callout canvas:', error);
+        }
     }
 
     async createCalloutGraphCanvas(callout: CalloutItem): Promise<void> {

@@ -426,29 +426,31 @@ export class CalloutOrganizerSettingTab extends PluginSettingTab {
             
             // Display built-in callouts section
             if (builtinTypes.length > 0) {
-                container.createEl('h5', {text: 'Built-in Obsidian Callouts'});
-                container.createEl('p', {
-                    text: `${builtinTypes.length} built-in callout types. Reset button restores Obsidian defaults.`,
-                    cls: 'setting-item-description'
-                });
+                const builtinSection = this.createCollapsibleSection(
+                    container, 
+                    'Built-in Obsidian Callouts',
+                    `${builtinTypes.length} built-in callout types. Reset button restores Obsidian defaults.`,
+                    'builtin-callouts'
+                );
                 
                 for (const type of builtinTypes) {
                     const colors = this.plugin.settings.calloutColors[type];
-                    this.createCalloutSetting(container, type, colors, true);
+                    this.createCalloutSetting(builtinSection.content, type, colors, true);
                 }
             }
             
             // Display user callouts section
             if (userTypes.length > 0) {
-                container.createEl('h5', {text: 'Custom Callouts'});
-                container.createEl('p', {
-                    text: `${userTypes.length} custom callout types. Reset button sets to note callout defaults.`,
-                    cls: 'setting-item-description'
-                });
+                const customSection = this.createCollapsibleSection(
+                    container, 
+                    'Custom Callouts',
+                    `${userTypes.length} custom callout types. Reset button sets to note callout defaults.`,
+                    'custom-callouts'
+                );
                 
                 for (const type of userTypes) {
                     const colors = this.plugin.settings.calloutColors[type];
-                    this.createCalloutSetting(container, type, colors, false);
+                    this.createCalloutSetting(customSection.content, type, colors, false);
                 }
             }
             
@@ -456,6 +458,60 @@ export class CalloutOrganizerSettingTab extends PluginSettingTab {
             loadingEl.textContent = 'Error scanning vault for callouts.';
             console.error('Error scanning for callouts:', error);
         }
+    }
+
+    private createCollapsibleSection(container: HTMLElement, title: string, description: string, sectionId: string) {
+        // Create main section container
+        const sectionContainer = container.createDiv({ cls: 'callout-collapsible-section' });
+        
+        // Create header with clickable title
+        const header = sectionContainer.createDiv({ cls: 'callout-section-header' });
+        const headerButton = header.createEl('button', { 
+            cls: 'callout-section-toggle',
+            attr: { 'aria-expanded': 'true' }
+        });
+        
+        // Add chevron icon
+        const chevron = headerButton.createEl('span', { cls: 'callout-section-chevron' });
+        chevron.innerHTML = '▼';
+        
+        // Add title
+        headerButton.createEl('h5', { text: title, cls: 'callout-section-title' });
+        
+        // Create content container
+        const contentContainer = sectionContainer.createDiv({ cls: 'callout-section-content' });
+        
+        // Add description
+        contentContainer.createEl('p', {
+            text: description,
+            cls: 'setting-item-description'
+        });
+        
+        // Add click handler for toggling
+        headerButton.addEventListener('click', () => {
+            const isExpanded = headerButton.getAttribute('aria-expanded') === 'true';
+            const newState = !isExpanded;
+            
+            headerButton.setAttribute('aria-expanded', newState.toString());
+            contentContainer.style.display = newState ? 'block' : 'none';
+            chevron.innerHTML = newState ? '▼' : '▶';
+            
+            // Store state in localStorage for persistence
+            localStorage.setItem(`callout-organizer-${sectionId}-expanded`, newState.toString());
+        });
+        
+        // Restore saved state
+        const savedState = localStorage.getItem(`callout-organizer-${sectionId}-expanded`);
+        if (savedState === 'false') {
+            headerButton.setAttribute('aria-expanded', 'false');
+            contentContainer.style.display = 'none';
+            chevron.innerHTML = '▶';
+        }
+        
+        return {
+            container: sectionContainer,
+            content: contentContainer
+        };
     }
 
     private createCalloutSetting(container: HTMLElement, type: string, colors: any, isBuiltin: boolean) {
