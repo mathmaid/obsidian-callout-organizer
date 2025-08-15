@@ -933,4 +933,125 @@
     padding: 20px;
 }
 
+/* Icon Selector Modal Styles */
+.icon-selector-modal {
+    padding: 20px;
+    max-height: 80vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.icon-selector-title {
+    margin: 0 0 20px 0;
+    text-align: center;
+    color: var(--text-normal);
+}
+
+.icon-selector-search-container {
+    margin-bottom: 10px;
+}
+
+.icon-selector-search-input {
+    width: 100%;
+    padding: 6px 8px;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 4px;
+    background: var(--background-primary);
+    color: var(--text-normal);
+    font-size: 14px;
+    height: auto;
+    box-sizing: border-box;
+}
+
+.icon-selector-search-input:focus {
+    outline: none;
+    border-color: var(--interactive-accent);
+}
+
+.icon-selector-tip {
+    margin-bottom: 15px;
+    text-align: center;
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.icon-selector-link {
+    color: var(--interactive-accent);
+    text-decoration: none;
+}
+
+.icon-selector-link:hover {
+    text-decoration: underline;
+}
+
+
+.icon-selector-clear-container {
+    margin-bottom: 15px;
+    text-align: center;
+}
+
+.icon-selector-clear-button {
+    padding: 6px 12px;
+    background: var(--interactive-normal);
+    color: var(--text-normal);
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.icon-selector-clear-button:hover {
+    background: var(--interactive-hover);
+}
+
+.icon-selector-icons {
+    flex: 1;
+    overflow-y: auto;
+    max-height: 60vh;
+}
+
+.icon-selector-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
+    gap: 8px;
+    padding: 10px 0;
+}
+
+.icon-selector-icon-button {
+    padding: 12px;
+    background: var(--background-primary);
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 50px;
+    position: relative;
+}
+
+.icon-selector-icon-button:hover {
+    background: var(--interactive-hover);
+    border-color: var(--interactive-accent);
+}
+
+.icon-selector-icon-button.selected {
+    background: var(--interactive-accent);
+    border-color: var(--interactive-accent);
+    color: var(--text-on-accent);
+}
+
+.icon-selector-icon-button svg {
+    width: 20px;
+    height: 20px;
+}
+
+.no-icon-indicator {
+    font-size: 18px;
+    color: var(--text-muted);
+    font-weight: bold;
+}
+
 

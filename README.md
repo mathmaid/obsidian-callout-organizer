@@ -166,12 +166,18 @@ The plugin uses intelligent file caching to improve search performance:
 Here is the recommended CSS snippet for the picture at the beginning of this document.
 
 ```css
---callout-border-opacity: 1;
---callout-radius: 0;
---callout-border-width: 0.1em;
-background-color: var(--background-primary);
-border-color: rgba(var(--callout-color), var(--callout-border-opacity));
-border-left-width: 0.3em;
+.callout-title {
+    font-family: "CMU Sans Serif Demi Condensed";
+}
+.callout {
+    font-family: "CMU Classical Serif";
+    --callout-border-opacity: 1;
+    --callout-radius: 0;
+    --callout-border-width: 0.1em;
+    background-color: var(--background-primary);
+    border-color: rgba(var(--callout-color), var(--callout-border-opacity));
+    border-left-width: 0.3em;
+}
 ```
 
 Here are the recommended colors of my custom callouts:
