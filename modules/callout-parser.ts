@@ -7,6 +7,8 @@ export class CalloutParser {
     private app: App;
     private settings: CalloutOrganizerSettings;
     private loadCalloutCache?: () => Promise<CalloutCache | null>;
+    private processingQueue: Promise<any>[] = [];
+    private readonly MAX_CONCURRENT_PROCESSING = 3;
 
     constructor(app: App, settings: CalloutOrganizerSettings) {
         this.app = app;
@@ -60,24 +62,67 @@ export class CalloutParser {
             processedFiles.add(currentFile.path);
         }
         
-        // Process all other files
-        for (const file of files) {
-            // Skip if already processed (current file) or should be excluded
-            if (processedFiles.has(file.path) || this.shouldSkipFile(file.path, true)) continue;
-            
-            const fileCallouts = await this.extractCalloutsFromFile(file, existingCache);
-            callouts.push(...fileCallouts);
-            processedFiles.add(file.path);
-        }
+        // Process files in batches to avoid blocking the UI
+        const remainingFiles = files.filter(file => 
+            !processedFiles.has(file.path) && !this.shouldSkipFile(file.path, true)
+        );
+        
+        await this.processFilesInBatches(remainingFiles, existingCache, callouts);
         
         return callouts;
     }
+    
+    private async processFilesInBatches(
+        files: TFile[], 
+        existingCache: CalloutCache | null, 
+        callouts: CalloutItem[]
+    ): Promise<void> {
+        const batchSize = this.MAX_CONCURRENT_PROCESSING;
+        
+        for (let i = 0; i < files.length; i += batchSize) {
+            const batch = files.slice(i, i + batchSize);
+            
+            // Process batch concurrently
+            const batchPromises = batch.map(file => 
+                this.extractCalloutsFromFile(file, existingCache)
+            );
+            
+            try {
+                const batchResults = await Promise.all(batchPromises);
+                batchResults.forEach(fileCallouts => {
+                    callouts.push(...fileCallouts);
+                });
+                
+                // Yield control back to the event loop between batches
+                await new Promise(resolve => setTimeout(resolve, 0));
+                
+            } catch (error) {
+                console.warn('Error processing file batch:', error);
+                // Process files individually on batch failure
+                for (const file of batch) {
+                    try {
+                        const fileCallouts = await this.extractCalloutsFromFile(file, existingCache);
+                        callouts.push(...fileCallouts);
+                    } catch (fileError) {
+                        console.warn(`Error processing file ${file.path}:`, fileError);
+                    }
+                }
+            }
+        }
+    }
 
     async extractCalloutsFromFile(file: TFile, existingCache?: CalloutCache | null): Promise<CalloutItem[]> {
-        const content = await this.app.vault.read(file);
-        const lines = content.split('\n');
-        const callouts: CalloutItem[] = [];
-        const fileModTime = file.stat.mtime;
+        try {
+            const content = await this.app.vault.read(file);
+            
+            // Quick check: if file has no callouts, return early
+            if (!content.includes('[!')) {
+                return [];
+            }
+            
+            const lines = content.split('\n');
+            const callouts: CalloutItem[] = [];
+            const fileModTime = file.stat.mtime;
         
         // Pre-calculate all headers once for this file (performance optimization)
         const allHeaders: HeadingInfo[] = [];
@@ -235,6 +280,10 @@ export class CalloutParser {
         }
         
         return callouts;
+        } catch (error) {
+            console.warn(`Error extracting callouts from file ${file.path}:`, error);
+            return [];
+        }
     }
 
 

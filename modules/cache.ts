@@ -6,6 +6,9 @@ import { CACHE_VERSION, PLUGIN_FOLDER, CACHE_FILENAME } from './constants';
 export class CacheManager {
     private app: App;
     private cacheOperationLock: Promise<any> | null = null;
+    private incrementalUpdateQueue: Map<string, TFile> = new Map();
+    private incrementalUpdateTimer: NodeJS.Timeout | null = null;
+    private readonly INCREMENTAL_UPDATE_DELAY = 1000;
 
     constructor(app: App) {
         this.app = app;
@@ -161,29 +164,138 @@ export class CacheManager {
         }
 
         try {
+            // Quick check: if too many files are pending incremental updates, invalidate cache
+            if (this.incrementalUpdateQueue.size > 10) {
+                return false;
+            }
+            
             // Check if any files have been modified since cache was created
+            const modifiedFiles: string[] = [];
             for (const [filePath, cachedModTime] of Object.entries(cache.fileModTimes)) {
                 const file = this.app.vault.getAbstractFileByPath(filePath);
                 if (file instanceof TFile) {
                     if (file.stat.mtime > readableToTimestamp(cachedModTime)) {
-                        return false;
+                        modifiedFiles.push(filePath);
                     }
                 } else {
                     return false;
                 }
             }
 
-            // Check for new files
+            // If only a few files are modified, consider cache still valid for incremental updates
+            if (modifiedFiles.length > 0 && modifiedFiles.length <= 5) {
+                // Queue these files for incremental update
+                modifiedFiles.forEach(filePath => {
+                    const file = this.app.vault.getAbstractFileByPath(filePath) as TFile;
+                    if (file) {
+                        this.queueIncrementalUpdate(file);
+                    }
+                });
+                return true; // Cache is valid, but will be updated incrementally
+            } else if (modifiedFiles.length > 5) {
+                return false; // Too many changes, full refresh needed
+            }
+
+            // Check for new files (limit check to avoid performance issues)
             const currentFiles = this.app.vault.getMarkdownFiles();
+            let newFileCount = 0;
             for (const file of currentFiles) {
                 if (!shouldSkipFile(file.path, true) && !cache.fileModTimes.hasOwnProperty(file.path)) {
-                    return false;
+                    newFileCount++;
+                    if (newFileCount <= 3) {
+                        this.queueIncrementalUpdate(file);
+                    } else {
+                        return false; // Too many new files
+                    }
                 }
             }
 
             return true;
         } catch (error) {
             console.warn('Error validating cache:', error);
+            return false;
+        }
+    }
+    
+    // Incremental cache update methods
+    private queueIncrementalUpdate(file: TFile) {
+        this.incrementalUpdateQueue.set(file.path, file);
+        
+        // Debounce incremental updates
+        if (this.incrementalUpdateTimer) {
+            clearTimeout(this.incrementalUpdateTimer);
+        }
+        
+        this.incrementalUpdateTimer = setTimeout(() => {
+            this.processIncrementalUpdates();
+        }, this.INCREMENTAL_UPDATE_DELAY);
+    }
+    
+    private async processIncrementalUpdates() {
+        if (this.incrementalUpdateQueue.size === 0) {
+            return;
+        }
+        
+        try {
+            const cache = await this.loadCalloutCache();
+            if (!cache) {
+                return; // No cache to update
+            }
+            
+            const filesToUpdate = Array.from(this.incrementalUpdateQueue.values());
+            this.incrementalUpdateQueue.clear();
+            
+            // Import CalloutParser temporarily for incremental updates
+            const { CalloutParser } = await import('./callout-parser');
+            const parser = new CalloutParser(this.app, {} as any); // Settings not needed for parsing
+            
+            // Update callouts for modified files
+            for (const file of filesToUpdate) {
+                try {
+                    // Remove old callouts from this file
+                    cache.callouts = cache.callouts.filter(callout => callout.file !== file.path);
+                    
+                    // Add new callouts from this file
+                    const newCallouts = await parser.extractCalloutsFromFile(file, cache);
+                    cache.callouts.push(...newCallouts);
+                    
+                    // Update file modification time
+                    cache.fileModTimes[file.path] = timestampToReadable(file.stat.mtime);
+                } catch (error) {
+                    console.warn(`Error updating callouts for file ${file.path}:`, error);
+                }
+            }
+            
+            // Save updated cache
+            await this.saveIncrementalCache(cache);
+            
+        } catch (error) {
+            console.error('Error processing incremental updates:', error);
+            // Clear the queue on error
+            this.incrementalUpdateQueue.clear();
+        }
+    }
+    
+    private async saveIncrementalCache(cache: CalloutCache): Promise<boolean> {
+        try {
+            cache.timestamp = Date.now();
+            
+            const cacheFilePath = this.getCacheFilePath();
+            const cacheContent = JSON.stringify(cache, null, 2)
+                .replace(/"headers":\s*\[\s*([^\]]*)\s*\]/g, (match, content) => {
+                    const cleanContent = content.replace(/\s*,\s*/g, ', ').replace(/\n\s*/g, '');
+                    return `"headers": [${cleanContent}]`;
+                })
+                .replace(/"headerLevels":\s*\[\s*([^\]]*)\s*\]/g, (match, content) => {
+                    const cleanContent = content.replace(/\s*,\s*/g, ', ').replace(/\n\s*/g, '');
+                    return `"headerLevels": [${cleanContent}]`;
+                });
+            
+            const adapter = this.app.vault.adapter;
+            await adapter.write(cacheFilePath, cacheContent);
+            return true;
+        } catch (error) {
+            console.error('Failed to save incremental cache update:', error);
             return false;
         }
     }

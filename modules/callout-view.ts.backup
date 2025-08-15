@@ -30,11 +30,23 @@ export class CalloutOrganizerView extends ItemView {
     private readonly SEARCH_DEBOUNCE_DELAY = 200;
     private readonly RENDER_DEBOUNCE_DELAY = 150;
     
-    // Lazy math processing optimization
-    private intersectionObserver: IntersectionObserver | null = null;
+    // Math processing optimization
     private mathProcessingQueue: HTMLElement[] = [];
     private mathProcessingActive = false;
+    private intersectionObserver: IntersectionObserver | null = null;
+    private mathCache = new Map<string, HTMLElement>();
+    private pendingMathElements = new WeakSet<HTMLElement>();
     private readonly MAX_CONCURRENT_MATH = 3;
+    private currentMathProcessing = 0;
+    
+    // Virtual scrolling optimization
+    private virtualScrollContainer: HTMLElement | null = null;
+    private virtualScrollObserver: IntersectionObserver | null = null;
+    private visibleCalloutElements = new Map<string, HTMLElement>();
+    private calloutElementPool: HTMLElement[] = [];
+    private readonly VIRTUAL_BUFFER_SIZE = 10;
+    private readonly ESTIMATED_CALLOUT_HEIGHT = 120;
+    private isVirtualScrolling = false;
 
     constructor(leaf: WorkspaceLeaf, plugin: any, mode: 'current' | 'search' = 'current') {
         super(leaf);
@@ -60,8 +72,8 @@ export class CalloutOrganizerView extends ItemView {
         const container = this.containerEl.children[1];
         container.empty();
         
-        // Setup lazy math processing
-        this.setupLazyMathProcessing();
+        // Setup math observer for lazy processing
+        this.setupMathObserver();
         
         // Top bar with mode toggle, search, and type selectors
         const topBar = container.createEl("div", { cls: "callout-top-bar" });
@@ -357,8 +369,106 @@ export class CalloutOrganizerView extends ItemView {
         return 'Search all callouts...';
     }
 
-    // Setup lazy math processing using intersection observer
-    private setupLazyMathProcessing() {
+    // Enhanced math processing with caching and batching
+    private processMathForElement(element: HTMLElement) {
+        if (this.pendingMathElements.has(element)) {
+            return; // Already queued for processing
+        }
+        
+        this.pendingMathElements.add(element);
+        this.mathProcessingQueue.push(element);
+        
+        if (!this.mathProcessingActive) {
+            this.startMathProcessing();
+        }
+    }
+    
+    private startMathProcessing() {
+        if (this.mathProcessingActive || this.mathProcessingQueue.length === 0) {
+            return;
+        }
+        
+        this.mathProcessingActive = true;
+        this.processMathBatch();
+    }
+    
+    private processMathBatch() {
+        if (this.mathProcessingQueue.length === 0) {
+            this.mathProcessingActive = false;
+            return;
+        }
+        
+        // Process a small batch to avoid blocking the UI
+        const batchSize = Math.min(this.MAX_CONCURRENT_MATH, this.mathProcessingQueue.length);
+        const batch = this.mathProcessingQueue.splice(0, batchSize);
+        
+        let processed = 0;
+        
+        const processBatchElement = async (element: HTMLElement) => {
+            try {
+                // Check cache first
+                const mathContent = this.getMathContentHash(element);
+                if (mathContent && this.mathCache.has(mathContent)) {
+                    const cachedElement = this.mathCache.get(mathContent)!;
+                    element.innerHTML = cachedElement.innerHTML;
+                    this.pendingMathElements.delete(element);
+                    processed++;
+                    return;
+                }
+                
+                // Process with MathJax
+                const mathJax = (window as any).MathJax;
+                if (mathJax && mathJax.typesetPromise) {
+                    await mathJax.typesetPromise([element]);
+                    // Cache the result
+                    if (mathContent) {
+                        const cached = element.cloneNode(true) as HTMLElement;
+                        this.mathCache.set(mathContent, cached);
+                    }
+                } else if (mathJax && mathJax.Hub) {
+                    // For MathJax 2, we can't easily await, so just queue
+                    mathJax.Hub.Queue(["Typeset", mathJax.Hub, element]);
+                }
+                
+                this.pendingMathElements.delete(element);
+            } catch (error) {
+                console.warn('Math processing error:', error);
+                this.pendingMathElements.delete(element);
+            }
+            processed++;
+        };
+        
+        // Process batch elements
+        Promise.all(batch.map(processBatchElement)).then(() => {
+            // Continue with next batch after a brief pause
+            requestAnimationFrame(() => {
+                this.processMathBatch();
+            });
+        });
+    }
+    
+    private getMathContentHash(element: HTMLElement): string | null {
+        // Create a simple hash of the math content for caching
+        const mathElements = element.querySelectorAll('.math, [class*="math"], script[type="math/tex"]');
+        if (mathElements.length === 0) return null;
+        
+        let content = '';
+        mathElements.forEach(el => {
+            content += el.textContent || '';
+        });
+        
+        // Simple hash function
+        let hash = 0;
+        for (let i = 0; i < content.length; i++) {
+            const char = content.charCodeAt(i);
+            hash = ((hash << 5) - hash) + char;
+            hash = hash & hash; // Convert to 32-bit integer
+        }
+        return hash.toString();
+    }
+    
+    // Lazy math processing using intersection observer
+    private setupMathObserver() {
         if (this.intersectionObserver) {
             this.intersectionObserver.disconnect();
         }
@@ -367,71 +477,340 @@ export class CalloutOrganizerView extends ItemView {
             entries.forEach(entry => {
                 if (entry.isIntersecting) {
                     const element = entry.target as HTMLElement;
-                    // Find math elements in the callout and queue them for processing
+                    // Process math for visible elements
                     const mathElements = element.querySelectorAll('.callout-organizer-content, .callout-organizer-title');
                     mathElements.forEach(mathEl => {
-                        this.queueMathProcessing(mathEl as HTMLElement);
+                        this.processMathForElement(mathEl as HTMLElement);
                     });
-                    // Stop observing this element after processing
+                    // Stop observing this element
                     this.intersectionObserver?.unobserve(element);
                 }
             });
         }, {
-            root: this.calloutContainerElement,
-            rootMargin: '100px', // Start processing 100px before element becomes visible
+            root: null,
+            rootMargin: '100px', // Start processing math 100px before element is visible
             threshold: 0.1
         });
     }
     
-    // Queue math processing to avoid blocking the UI
-    private queueMathProcessing(element: HTMLElement) {
-        this.mathProcessingQueue.push(element);
-        
-        if (!this.mathProcessingActive) {
-            this.processMathQueue();
-        }
-    }
-    
-    // Process math elements in batches to avoid blocking UI
-    private async processMathQueue() {
-        if (this.mathProcessingQueue.length === 0) {
-            this.mathProcessingActive = false;
+    // Virtual scrolling implementation for better performance with large datasets
+    private setupVirtualScrolling(container: HTMLElement, callouts: CalloutItem[]) {
+        // Only enable virtual scrolling for large datasets
+        if (callouts.length < 50) {
+            this.isVirtualScrolling = false;
             return;
         }
         
-        this.mathProcessingActive = true;
+        this.isVirtualScrolling = true;
+        this.virtualScrollContainer = container;
         
-        // Process up to MAX_CONCURRENT_MATH elements at once
-        const batch = this.mathProcessingQueue.splice(0, this.MAX_CONCURRENT_MATH);
-        
-        try {
-            await Promise.all(batch.map(element => this.processMathForElement(element)));
-        } catch (error) {
-            console.warn('Error processing math batch:', error);
+        if (this.virtualScrollObserver) {
+            this.virtualScrollObserver.disconnect();
         }
         
-        // Continue processing remaining items with a small delay
-        requestAnimationFrame(() => {
-            this.processMathQueue();
+        // Create spacer elements for non-visible items
+        const estimatedTotalHeight = callouts.length * this.ESTIMATED_CALLOUT_HEIGHT;
+        const spacerTop = container.createEl('div', { cls: 'virtual-scroll-spacer-top' });
+        const visibleContainer = container.createEl('div', { cls: 'virtual-scroll-visible' });
+        const spacerBottom = container.createEl('div', { cls: 'virtual-scroll-spacer-bottom' });
+        
+        spacerTop.style.height = '0px';
+        spacerBottom.style.height = estimatedTotalHeight + 'px';
+        
+        // Setup intersection observer for virtual scrolling
+        this.virtualScrollObserver = new IntersectionObserver((entries) => {
+            this.updateVirtualScrolling(callouts, spacerTop, visibleContainer, spacerBottom);
+        }, {
+            root: container,
+            rootMargin: '200px',
+            threshold: 0
+        });
+        
+        // Observe the spacers
+        this.virtualScrollObserver.observe(spacerTop);
+        this.virtualScrollObserver.observe(spacerBottom);
+        
+        // Initial render
+        this.updateVirtualScrolling(callouts, spacerTop, visibleContainer, spacerBottom);
+    }
+    
+    private updateVirtualScrolling(
+        callouts: CalloutItem[], 
+        spacerTop: HTMLElement, 
+        visibleContainer: HTMLElement, 
+        spacerBottom: HTMLElement
+    ) {
+        if (!this.virtualScrollContainer) return;
+        
+        const scrollTop = this.virtualScrollContainer.scrollTop;
+        const containerHeight = this.virtualScrollContainer.clientHeight;
+        
+        // Calculate visible range with buffer
+        const startIndex = Math.max(0, Math.floor(scrollTop / this.ESTIMATED_CALLOUT_HEIGHT) - this.VIRTUAL_BUFFER_SIZE);
+        const endIndex = Math.min(callouts.length - 1, 
+            Math.floor((scrollTop + containerHeight) / this.ESTIMATED_CALLOUT_HEIGHT) + this.VIRTUAL_BUFFER_SIZE);
+        
+        // Update spacer heights
+        const topSpacerHeight = startIndex * this.ESTIMATED_CALLOUT_HEIGHT;
+        const bottomSpacerHeight = (callouts.length - endIndex - 1) * this.ESTIMATED_CALLOUT_HEIGHT;
+        
+        spacerTop.style.height = topSpacerHeight + 'px';
+        spacerBottom.style.height = Math.max(0, bottomSpacerHeight) + 'px';
+        
+        // Render visible callouts
+        this.renderVisibleCallouts(callouts.slice(startIndex, endIndex + 1), visibleContainer, startIndex);
+    }
+    
+    private renderVisibleCallouts(visibleCallouts: CalloutItem[], container: HTMLElement, startIndex: number) {
+        // Clear container but reuse elements when possible
+        const existingElements = Array.from(container.children) as HTMLElement[];
+        
+        // Hide excess elements
+        for (let i = visibleCallouts.length; i < existingElements.length; i++) {
+            existingElements[i].style.display = 'none';
+        }
+        
+        // Render each visible callout
+        visibleCallouts.forEach((callout, index) => {
+            let calloutEl = existingElements[index];
+            
+            if (!calloutEl) {
+                // Create new element or reuse from pool
+                calloutEl = this.getPooledCalloutElement();
+                container.appendChild(calloutEl);
+            } else {
+                calloutEl.style.display = '';
+            }
+            
+            // Update the element with new callout data
+            this.updateCalloutElement(calloutEl, callout, startIndex + index);
         });
     }
     
-    // Math processing for MathJax integration (now returns a promise for batching)
-    private async processMathForElement(element: HTMLElement): Promise<void> {
-        try {
-            // Check if MathJax is available
-            const mathJax = (window as any).MathJax;
-            if (mathJax && mathJax.typesetPromise) {
-                // Use MathJax 3 API
-                await mathJax.typesetPromise([element]);
-            } else if (mathJax && mathJax.Hub) {
-                // Use MathJax 2 API (wrap in promise for consistency)
-                return new Promise((resolve) => {
-                    mathJax.Hub.Queue(["Typeset", mathJax.Hub, element, resolve]);
-                });
+    private getPooledCalloutElement(): HTMLElement {
+        if (this.calloutElementPool.length > 0) {
+            return this.calloutElementPool.pop()!;
+        }
+        
+        // Create new element with basic structure
+        const calloutEl = document.createElement('div');
+        calloutEl.className = 'callout-organizer-item callout';
+        calloutEl.style.cursor = 'pointer';
+        calloutEl.draggable = true;
+        
+        return calloutEl;
+    }
+    
+    private returnElementToPool(element: HTMLElement) {
+        element.innerHTML = '';
+        element.style.display = 'none';
+        this.calloutElementPool.push(element);
+    }
+    
+    private updateCalloutElement(calloutEl: HTMLElement, callout: CalloutItem, index: number) {
+        // Clear and rebuild the element content
+        calloutEl.innerHTML = '';
+        calloutEl.setAttribute('data-callout', callout.type);
+        calloutEl.style.display = '';
+        
+        // This method would contain the same logic as the current renderCallouts
+        // but for a single callout element. For brevity, I'll reference the existing logic
+        this.renderSingleCallout(calloutEl, callout);
+    }
+    
+    private renderSingleCallout(calloutEl: HTMLElement, callout: CalloutItem) {
+        // Add drag functionality
+        let pendingCalloutId: string | null = null;
+        
+        calloutEl.ondragstart = (e) => {
+            if (e.dataTransfer) {
+                // Check if we need to generate a new callout ID
+                let calloutID = callout.calloutID;
+                
+                if (!calloutID) {
+                    calloutID = this.plugin.generateCalloutId(callout);
+                    callout.calloutID = calloutID;
+                    pendingCalloutId = calloutID || null;
+                }
+                
+                // Generate link text based on settings
+                let linkText: string;
+                const fileNamePart = callout.file.replace(/\.md$/, '');
+                const linkTarget = `${fileNamePart}#^${calloutID}`;
+
+                if (this.plugin.settings.useEmbedLinks) {
+                    if (this.plugin.settings.hideFileNamesInLinks) {
+                        linkText = `![[${linkTarget}|${calloutID}]]`;
+                    } else {
+                        linkText = `![[${linkTarget}]]`;
+                    }
+                } else {
+                    if (this.plugin.settings.hideFileNamesInLinks) {
+                        linkText = `[[${linkTarget}|${calloutID}]]`;
+                    } else {
+                        linkText = `[[${linkTarget}]]`;
+                    }
+                }
+                e.dataTransfer.setData('text/plain', linkText);
+                e.dataTransfer.effectAllowed = 'copy';
+                calloutEl.style.opacity = '0.5';
             }
-        } catch (error) {
-            console.warn('Math processing error:', error);
+        };
+        
+        calloutEl.ondragend = () => {
+            calloutEl.style.opacity = '1';
+            if (pendingCalloutId) {
+                setTimeout(async () => {
+                    try {
+                        await this.plugin.addCalloutIdToCallout(callout, pendingCalloutId!);
+                        await this.plugin.saveCalloutCache(this.callouts);
+                        pendingCalloutId = null;
+                    } catch (error) {
+                        console.error('Error adding callout ID to file:', error);
+                        callout.calloutID = undefined;
+                        pendingCalloutId = null;
+                    }
+                }, 100);
+            }
+        };
+        
+        // Create header with title and canvas button
+        const header = calloutEl.createEl('div', { cls: 'callout-organizer-header' });
+        header.style.cssText = 'display: flex; align-items: center; gap: 8px;';
+        
+        const displayTitle = callout.title || callout.type.charAt(0).toUpperCase() + callout.type.slice(1);
+        
+        if (displayTitle) {
+            const titleEl = header.createEl('span', { cls: 'callout-organizer-title' });
+            const calloutColor = this.plugin.settings.calloutColors[callout.type]?.color || 
+                                this.plugin.settings.calloutColors['note']?.color || 'var(--callout-title-color)';
+            
+            // Add icon
+            let iconName: string;
+            if (this.plugin.isBuiltinCalloutType(callout.type)) {
+                const defaultIcon = this.plugin.getDefaultIconForCalloutType(callout.type);
+                const currentIcon = this.plugin.settings.calloutColors[callout.type]?.icon;
+                iconName = (currentIcon && currentIcon !== defaultIcon) ? currentIcon : defaultIcon;
+            } else {
+                iconName = this.plugin.settings.calloutColors[callout.type]?.icon || 
+                          this.plugin.settings.calloutColors['note']?.icon || 'pencil';
+            }
+            
+            if (iconName && iconName !== 'none') {
+                const iconEl = titleEl.createEl('span', { cls: 'callout-title-icon' });
+                if (iconName === 'pencil') {
+                    iconEl.innerHTML = OBSIDIAN_NOTE_ICON_SVG;
+                } else {
+                    setIcon(iconEl, iconName);
+                }
+                iconEl.style.cssText = `margin-right: 6px; width: calc(var(--callout-font-size, 14px) * 16 / 14); height: calc(var(--callout-font-size, 14px) * 16 / 14); display: inline-flex; align-items: center; color: ${calloutColor};`;
+            }
+            
+            titleEl.style.color = calloutColor;
+            
+            MarkdownRenderer.render(this.app, displayTitle, titleEl, callout.file, this.component).then(() => {
+                titleEl.style.color = calloutColor;
+            }).catch((error) => {
+                console.warn('Failed to render callout title:', error);
+                titleEl.textContent = displayTitle;
+                titleEl.style.color = calloutColor;
+            });
+        }
+        
+        // Add canvas button
+        const canvasBtn = header.createEl('button', { 
+            cls: 'callout-canvas-button',
+            title: 'Open in Canvas'
+        });
+        setIcon(canvasBtn, 'layout-dashboard');
+        canvasBtn.style.cssText = 'margin-left: auto; padding: 4px; border: none; background: var(--interactive-normal); border-radius: 4px; cursor: pointer; display: flex; align-items: center; justify-content: center; width: 24px; height: 24px;';
+        
+        canvasBtn.onmouseover = () => canvasBtn.style.background = 'var(--interactive-hover)';
+        canvasBtn.onmouseleave = () => canvasBtn.style.background = 'var(--interactive-normal)';
+        canvasBtn.onclick = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            this.openCalloutCanvas(callout);
+        };
+        
+        // Add content
+        const content = calloutEl.createEl('div', { cls: 'callout-organizer-content' });
+        MarkdownRenderer.render(this.app, callout.content, content, callout.file, this.component).catch((error) => {
+            console.warn('Failed to render callout content:', error);
+            content.textContent = callout.content;
+        });
+        
+        // Add breadcrumb
+        const breadcrumb = calloutEl.createEl('div', { cls: 'callout-organizer-breadcrumb' });
+        
+        if (this.plugin.settings.showFilenames && callout.file) {
+            const fileParts = callout.file?.split('/');
+            const filename = fileParts?.pop()?.replace(/\.md$/, '') || callout.file || 'Unknown';
+            const fileLink = breadcrumb.createEl('a', { 
+                text: filename,
+                href: '#',
+                cls: 'callout-organizer-file-link'
+            });
+            fileLink.onclick = (e) => {
+                e.preventDefault();
+                if (this.plugin.openFile) {
+                    this.plugin.openFile(callout.file, callout.lineNumber, e.ctrlKey || e.metaKey);
+                }
+            };
+        }
+        
+        // Add headers and callout ID to breadcrumb (simplified)
+        if (callout.headers && callout.headers.length > 0) {
+            const filteredHeaders = filterHeadersBySettings(callout.headers, callout.headerLevels, this.plugin.settings);
+            filteredHeaders.forEach(headerTitle => {
+                if (breadcrumb.children.length > 0) {
+                    breadcrumb.createEl('span', { text: ' > ', cls: 'callout-organizer-breadcrumb-separator' });
+                }
+                const headingLink = breadcrumb.createEl('a', {
+                    text: headerTitle,
+                    href: '#',
+                    cls: 'callout-organizer-heading-link'
+                });
+                headingLink.onclick = (e) => {
+                    e.preventDefault();
+                    if (this.plugin.openFile) {
+                        this.plugin.openFile(callout.file, callout.lineNumber, e.ctrlKey || e.metaKey);
+                    }
+                };
+            });
+        }
+        
+        if (callout.calloutID && this.plugin.settings.showCalloutIds) {
+            if (breadcrumb.children.length > 0) {
+                breadcrumb.createEl('span', { text: ' > ', cls: 'callout-organizer-breadcrumb-separator' });
+            }
+            const blockLink = breadcrumb.createEl('a', {
+                text: `^${callout.calloutID}`,
+                href: '#',
+                cls: 'callout-organizer-callout-id'
+            });
+            blockLink.onclick = (e) => {
+                e.preventDefault();
+                if (this.plugin.openFile) {
+                    this.plugin.openFile(callout.file, callout.lineNumber, e.ctrlKey || e.metaKey);
+                }
+            };
+        }
+        
+        // Main click handler
+        calloutEl.onclick = async (e) => {
+            if ((e.target as HTMLElement).tagName === 'A') {
+                return;
+            }
+            e.preventDefault();
+            if (this.plugin.openFile) {
+                await this.plugin.openFile(callout.file, callout.lineNumber, e.ctrlKey || e.metaKey);
+            }
+        };
+        
+        // Add to intersection observer for math processing
+        if (this.intersectionObserver) {
+            this.intersectionObserver.observe(calloutEl);
         }
     }
 
@@ -469,6 +848,13 @@ export class CalloutOrganizerView extends ItemView {
             }
         });
         
+        // Use virtual scrolling for large datasets
+        if (sortedCallouts.length >= 50) {
+            this.setupVirtualScrolling(calloutsList, sortedCallouts);
+            return;
+        }
+        
+        // Regular rendering for smaller datasets
         for (const callout of sortedCallouts) {
             // Use the same class structure as the original
             const calloutEl = calloutsList.createEl("div", { 
@@ -599,11 +985,11 @@ export class CalloutOrganizerView extends ItemView {
                 // Apply callout color to title text
                 titleEl.style.color = calloutColor;
                 
-                // Render title with lazy math support
+                // Render title with optimized math support
                 MarkdownRenderer.render(this.app, displayTitle, titleEl, callout.file, this.component).then(() => {
                     // Reapply color after markdown rendering
                     titleEl.style.color = calloutColor;
-                    // Math will be processed when element becomes visible
+                    // Math processing will be handled by intersection observer
                 }).catch((error) => {
                     console.warn('Failed to render callout title:', error);
                     // Fallback to plain text
@@ -645,22 +1031,23 @@ export class CalloutOrganizerView extends ItemView {
                 };
             }
             
-            // Content with full markdown support (matching original)
+            // Content with full markdown support (optimized)
             const content = calloutEl.createEl("div", { cls: "callout-organizer-content" });
             
             // Render full markdown content with lazy math support
             MarkdownRenderer.render(this.app, callout.content, content, callout.file, this.component).then(() => {
-                // Math will be processed when element becomes visible
+                // Math processing will be handled by intersection observer when visible
             }).catch((error) => {
                 console.warn('Failed to render callout content:', error);
                 // Fallback to plain text
                 content.textContent = callout.content;
             });
             
-            // Add callout to intersection observer for lazy math processing
+            // Add the callout to intersection observer for lazy math processing
             if (this.intersectionObserver) {
                 this.intersectionObserver.observe(calloutEl);
             }
+        }
             
             // Build hierarchical breadcrumb (at the bottom, matching original implementation)
             const breadcrumb = calloutEl.createEl("div", { cls: "callout-organizer-breadcrumb" });
@@ -806,6 +1193,7 @@ export class CalloutOrganizerView extends ItemView {
     async onClose() {
         this.component.unload();
         
+        // Clean up timers
         if (this.refreshDebounceTimer) {
             clearTimeout(this.refreshDebounceTimer);
             this.refreshDebounceTimer = null;
@@ -815,13 +1203,25 @@ export class CalloutOrganizerView extends ItemView {
             this.searchDebounceTimer = null;
         }
         
-        // Cleanup lazy math processing
+        // Clean up intersection observers
         if (this.intersectionObserver) {
             this.intersectionObserver.disconnect();
             this.intersectionObserver = null;
         }
+        if (this.virtualScrollObserver) {
+            this.virtualScrollObserver.disconnect();
+            this.virtualScrollObserver = null;
+        }
+        
+        // Clear math processing resources
         this.mathProcessingQueue = [];
         this.mathProcessingActive = false;
+        this.mathCache.clear();
+        
+        // Clear virtual scrolling resources
+        this.visibleCalloutElements.clear();
+        this.calloutElementPool = [];
+        this.virtualScrollContainer = null;
     }
 
     // TODO: The following methods need to be extracted from main.ts:
