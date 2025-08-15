@@ -27,7 +27,7 @@ __export(main_exports, {
   default: () => CalloutOrganizerPlugin
 });
 module.exports = __toCommonJS(main_exports);
-var import_obsidian6 = require("obsidian");
+var import_obsidian5 = require("obsidian");
 
 // modules/constants.ts
 var OBSIDIAN_NOTE_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="svg-icon lucide-pencil"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"></path><path d="m15 5 4 4"></path></svg>`;
@@ -6953,7 +6953,7 @@ var CalloutParser = class {
    * Generate a unique callout ID based on content and type
    */
   generateCalloutId(callout) {
-    const typePrefix = callout.type.toLowerCase().substring(0, 3);
+    const typePrefix = callout.type.toLowerCase();
     const randomSuffix = Math.random().toString(36).substr(2, 6);
     return `${typePrefix}-${randomSuffix}`;
   }
@@ -8022,7 +8022,6 @@ var CalloutOrganizerSettingTab = class extends import_obsidian4.PluginSettingTab
 };
 
 // modules/canvas-handler.ts
-var import_obsidian5 = require("obsidian");
 var CanvasHandler = class {
   constructor(app, settings) {
     this.app = app;
@@ -8143,7 +8142,7 @@ var CanvasHandler = class {
       }
       const mainNodeId = `node-${Date.now()}-main`;
       const mainNodeWidth = selectedCallout.canvasWidth || 400;
-      const mainNodeHeight = selectedCallout.canvasHeight || 180;
+      const mainNodeHeight = selectedCallout.canvasHeight || 200;
       const canvasData = {
         nodes: [
           {
@@ -8161,109 +8160,254 @@ var CanvasHandler = class {
         edges: []
       };
       const allCallouts = await getAllCallouts();
-      const relatedCallouts = this.findRelatedCallouts(selectedCallout, allCallouts);
-      this.layoutRelatedCallouts(canvasData, mainNodeId, relatedCallouts, selectedCallout);
-      const existingCanvas = this.app.vault.getAbstractFileByPath(canvasPath);
-      if (existingCanvas instanceof import_obsidian5.TFile) {
-        await this.app.vault.modify(existingCanvas, JSON.stringify(canvasData, null, 2));
-      } else {
-        await this.app.vault.create(canvasPath, JSON.stringify(canvasData, null, 2));
-      }
-      const canvasFile = this.app.vault.getAbstractFileByPath(canvasPath);
-      if (canvasFile instanceof import_obsidian5.TFile) {
-        const leaf = this.app.workspace.getLeaf(false);
-        await leaf.openFile(canvasFile);
-      }
-    } catch (error) {
-      console.error("Error creating callout graph canvas:", error);
-    }
-  }
-  /**
-   * Find callouts related to the selected callout through outlinks
-   */
-  findRelatedCallouts(selectedCallout, allCallouts) {
-    const related = [];
-    const selectedKey = `${selectedCallout.file}:${selectedCallout.calloutID}`;
-    const calloutMap = /* @__PURE__ */ new Map();
-    allCallouts.forEach((callout) => {
-      if (callout.calloutID) {
-        const key = `${callout.file}:${callout.calloutID}`;
-        calloutMap.set(key, callout);
-      }
-    });
-    if (selectedCallout.outlinks) {
-      selectedCallout.outlinks.forEach(([filename, calloutID]) => {
-        const targetKey = `${filename}:${calloutID}`;
-        const targetCallout = calloutMap.get(targetKey);
-        if (targetCallout && targetKey !== selectedKey) {
-          related.push(targetCallout);
+      const getCalloutKey = (callout) => `${callout.file}:${callout.calloutID}`;
+      const mainCalloutKey = getCalloutKey(selectedCallout);
+      const calloutMap = /* @__PURE__ */ new Map();
+      allCallouts.forEach((callout) => {
+        if (callout.calloutID) {
+          const key = `${callout.file}:${callout.calloutID}`;
+          calloutMap.set(key, callout);
         }
       });
-    }
-    allCallouts.forEach((callout) => {
-      if (callout.calloutID && callout.outlinks) {
-        const hasLinkToSelected = callout.outlinks.some(
-          ([filename, calloutID]) => filename === selectedCallout.file && calloutID === selectedCallout.calloutID
-        );
-        if (hasLinkToSelected) {
-          const calloutKey = `${callout.file}:${callout.calloutID}`;
-          if (calloutKey !== selectedKey && !related.some((r) => `${r.file}:${r.calloutID}` === calloutKey)) {
-            related.push(callout);
+      const directInlinks = [];
+      const directOutlinks = [];
+      const bidirectionalLinks = [];
+      const globalEdgeLabels = /* @__PURE__ */ new Map();
+      allCallouts.forEach((callout) => {
+        if (callout.outlinks) {
+          callout.outlinks.forEach(([filename, calloutID, label]) => {
+            if (label) {
+              const fromKey = `${callout.file}:${callout.calloutID}`;
+              const toKey = `${filename}:${calloutID}`;
+              const edgeKey = `${fromKey}->${toKey}`;
+              globalEdgeLabels.set(edgeKey, label);
+            }
+          });
+        }
+      });
+      const outlinkLabels = /* @__PURE__ */ new Map();
+      if (selectedCallout.outlinks) {
+        selectedCallout.outlinks.forEach(([filename, calloutID, label]) => {
+          var _a2;
+          const targetKey = `${filename}:${calloutID}`;
+          if (label) {
+            outlinkLabels.set(targetKey, label);
+          }
+          const isSelfConnection = filename === selectedCallout.file && calloutID === selectedCallout.calloutID;
+          if (!isSelfConnection) {
+            const targetCallout = calloutMap.get(targetKey);
+            if (targetCallout) {
+              const isTargetLinkingBack = (_a2 = targetCallout.outlinks) == null ? void 0 : _a2.some(
+                ([f, cId]) => f === selectedCallout.file && cId === selectedCallout.calloutID
+              );
+              if (isTargetLinkingBack) {
+                bidirectionalLinks.push(targetCallout);
+              } else {
+                directOutlinks.push(targetCallout);
+              }
+            }
+          }
+        });
+      }
+      allCallouts.forEach((callout) => {
+        if (callout.calloutID && callout.outlinks) {
+          const hasLinkToMain = callout.outlinks.some(
+            ([filename, calloutID]) => filename === selectedCallout.file && calloutID === selectedCallout.calloutID
+          );
+          if (hasLinkToMain) {
+            const calloutKey = getCalloutKey(callout);
+            const isSelfConnection = calloutKey === getCalloutKey(selectedCallout);
+            if (!isSelfConnection) {
+              const alreadyProcessed = bidirectionalLinks.some(
+                (biCallout) => getCalloutKey(biCallout) === calloutKey
+              );
+              if (!alreadyProcessed) {
+                directInlinks.push(callout);
+              }
+            }
           }
         }
+      });
+      const layoutData = /* @__PURE__ */ new Map();
+      const nodeSpacing = 280;
+      const levelSpacing = Math.max(600, mainNodeWidth + 200);
+      const bidirectionalSpacing = 150;
+      directInlinks.forEach((callout, index) => {
+        const calloutKey = getCalloutKey(callout);
+        const totalInlinks = directInlinks.length;
+        const x = -levelSpacing;
+        const y = (index - (totalInlinks - 1) / 2) * nodeSpacing;
+        layoutData.set(calloutKey, {
+          callout,
+          x,
+          y,
+          level: 1,
+          side: "left"
+        });
+      });
+      directOutlinks.forEach((callout, index) => {
+        const calloutKey = getCalloutKey(callout);
+        const totalOutlinks = directOutlinks.length;
+        const x = levelSpacing;
+        const y = (index - (totalOutlinks - 1) / 2) * nodeSpacing;
+        layoutData.set(calloutKey, {
+          callout,
+          x,
+          y,
+          level: 1,
+          side: "right"
+        });
+      });
+      bidirectionalLinks.forEach((callout, index) => {
+        const calloutKey = getCalloutKey(callout);
+        const totalBidirectional = bidirectionalLinks.length;
+        const x = 0;
+        const y = (index - (totalBidirectional - 1) / 2) * bidirectionalSpacing + (index % 2 === 0 ? -250 : 250);
+        layoutData.set(calloutKey, {
+          callout,
+          x,
+          y,
+          level: 1,
+          side: "bidirectional"
+        });
+      });
+      let nodeIdCounter = 0;
+      layoutData.forEach(({ callout, x, y, level }) => {
+        const defaultWidth = Math.max(300, 400 - level * 25);
+        const defaultHeight = Math.max(120, 200 - level * 20);
+        const nodeWidth = callout.canvasWidth || defaultWidth;
+        const nodeHeight = callout.canvasHeight || defaultHeight;
+        const nodeId = `node-${Date.now()}-${++nodeIdCounter}`;
+        canvasData.nodes.push({
+          id: nodeId,
+          type: "file",
+          file: callout.file,
+          subpath: `#^${callout.calloutID}`,
+          x: Math.round(x),
+          y: Math.round(y),
+          width: nodeWidth,
+          height: nodeHeight,
+          color: this.getCanvasColorForCallout(callout.type)
+        });
+      });
+      let edgeId = 0;
+      const nodeMap = /* @__PURE__ */ new Map();
+      canvasData.nodes.forEach((node) => {
+        if (node.type === "file" && node.file && node.subpath) {
+          const fileMatch = node.subpath.match(/^#\^(.+)$/);
+          if (fileMatch) {
+            const calloutID = fileMatch[1];
+            const key = `${node.file}:${calloutID}`;
+            nodeMap.set(key, node);
+          }
+        }
+      });
+      const mainNodeKey = `${selectedCallout.file}:${selectedCallout.calloutID}`;
+      const mainNode = nodeMap.get(mainNodeKey);
+      if (mainNode) {
+        directInlinks.forEach((callout) => {
+          const calloutKey = getCalloutKey(callout);
+          const fromNode = nodeMap.get(calloutKey);
+          if (fromNode) {
+            const edge = {
+              id: `edge-${++edgeId}`,
+              fromNode: fromNode.id,
+              fromSide: "right",
+              toNode: mainNode.id,
+              toSide: "left"
+            };
+            const edgeKey = `${calloutKey}->${mainNodeKey}`;
+            const label = globalEdgeLabels.get(edgeKey);
+            if (label) {
+              edge.label = label;
+            }
+            canvasData.edges.push(edge);
+          }
+        });
+        directOutlinks.forEach((callout) => {
+          const calloutKey = getCalloutKey(callout);
+          const toNode = nodeMap.get(calloutKey);
+          if (toNode) {
+            const edge = {
+              id: `edge-${++edgeId}`,
+              fromNode: mainNode.id,
+              fromSide: "right",
+              toNode: toNode.id,
+              toSide: "left"
+            };
+            const globalEdgeKey = `${mainNodeKey}->${calloutKey}`;
+            const globalLabel = globalEdgeLabels.get(globalEdgeKey);
+            const localLabel = outlinkLabels.get(calloutKey);
+            const label = globalLabel || localLabel;
+            if (label) {
+              edge.label = label;
+            }
+            canvasData.edges.push(edge);
+          }
+        });
+        bidirectionalLinks.forEach((callout) => {
+          const calloutKey = getCalloutKey(callout);
+          const biNode = nodeMap.get(calloutKey);
+          if (biNode) {
+            const forwardEdge = {
+              id: `edge-${++edgeId}`,
+              fromNode: mainNode.id,
+              fromSide: "right",
+              toNode: biNode.id,
+              toSide: "right"
+            };
+            const globalForwardKey = `${mainNodeKey}->${calloutKey}`;
+            const globalForwardLabel = globalEdgeLabels.get(globalForwardKey);
+            const localForwardLabel = outlinkLabels.get(calloutKey);
+            const forwardLabel = globalForwardLabel || localForwardLabel;
+            if (forwardLabel) {
+              forwardEdge.label = forwardLabel;
+            }
+            canvasData.edges.push(forwardEdge);
+            const reverseEdge = {
+              id: `edge-${++edgeId}`,
+              fromNode: biNode.id,
+              fromSide: "left",
+              toNode: mainNode.id,
+              toSide: "left"
+            };
+            const globalReverseKey = `${calloutKey}->${mainNodeKey}`;
+            const reverseLabel = globalEdgeLabels.get(globalReverseKey);
+            if (reverseLabel) {
+              reverseEdge.label = reverseLabel;
+            }
+            canvasData.edges.push(reverseEdge);
+          }
+        });
       }
-    });
-    return related;
-  }
-  /**
-   * Layout related callouts around the main callout in a circular pattern
-   */
-  layoutRelatedCallouts(canvasData, mainNodeId, relatedCallouts, selectedCallout) {
-    const radius = 400;
-    const angleStep = relatedCallouts.length > 0 ? 2 * Math.PI / relatedCallouts.length : 0;
-    relatedCallouts.forEach((callout, index) => {
-      const angle = index * angleStep;
-      const x = Math.cos(angle) * radius;
-      const y = Math.sin(angle) * radius;
-      const nodeId = `node-${Date.now()}-${index}`;
-      canvasData.nodes.push({
-        id: nodeId,
-        type: "file",
-        file: callout.file,
-        subpath: `#^${callout.calloutID}`,
-        x,
-        y,
-        width: callout.canvasWidth || 350,
-        height: callout.canvasHeight || 150,
-        color: this.getCanvasColorForCallout(callout.type)
-      });
-      canvasData.edges.push({
-        id: `edge-${Date.now()}-${index}`,
-        fromNode: mainNodeId,
-        fromSide: "right",
-        toNode: nodeId,
-        toSide: "left"
-      });
-    });
+      try {
+        let canvasFile = this.app.vault.getAbstractFileByPath(canvasPath);
+        if (canvasFile) {
+          await this.app.vault.delete(canvasFile);
+        }
+        const canvasContent = JSON.stringify(canvasData, null, "	");
+        canvasFile = await this.app.vault.create(canvasPath, canvasContent);
+        if (canvasFile) {
+          const leaf = this.app.workspace.getLeaf("tab");
+          await leaf.openFile(canvasFile);
+        }
+      } catch (error) {
+        console.error("Error regenerating canvas:", error);
+      }
+    } catch (error) {
+      console.error("Error creating canvas:", error);
+    }
   }
   /**
    * Get canvas color for callout type
    */
   getCanvasColorForCallout(calloutType) {
-    const colorMap = {
-      "note": "#086ddd",
-      "info": "#086ddd",
-      "tip": "#00a86b",
-      "important": "#00a86b",
-      "success": "#00a86b",
-      "warning": "#ff9500",
-      "caution": "#ff9500",
-      "danger": "#e13238",
-      "error": "#e13238",
-      "example": "#7c3aed",
-      "quote": "#6b7280"
-    };
-    return colorMap[calloutType.toLowerCase()] || "#6b7280";
+    var _a;
+    const calloutColor = (_a = this.settings.calloutColors[calloutType]) == null ? void 0 : _a.color;
+    if (!calloutColor) {
+      return "#086ddd";
+    }
+    return calloutColor;
   }
   /**
    * Analyze canvas files for link relationships
@@ -8796,7 +8940,7 @@ var ColorManager = class {
 };
 
 // main.ts
-var CalloutOrganizerPlugin = class extends import_obsidian6.Plugin {
+var CalloutOrganizerPlugin = class extends import_obsidian5.Plugin {
   constructor() {
     super(...arguments);
     // Plugin state
@@ -8946,7 +9090,7 @@ var CalloutOrganizerPlugin = class extends import_obsidian6.Plugin {
   // File navigation
   async openFile(filename, lineNumber, newTab) {
     const file = this.app.vault.getAbstractFileByPath(filename);
-    if (file instanceof import_obsidian6.TFile) {
+    if (file instanceof import_obsidian5.TFile) {
       let leaf;
       if (newTab) {
         leaf = this.app.workspace.getLeaf("tab");
@@ -9029,7 +9173,7 @@ var CalloutOrganizerPlugin = class extends import_obsidian6.Plugin {
   async addCalloutIdToCallout(callout, calloutID) {
     try {
       const file = this.app.vault.getAbstractFileByPath(callout.file);
-      if (!(file instanceof import_obsidian6.TFile)) {
+      if (!(file instanceof import_obsidian5.TFile)) {
         console.error(`File not found: ${callout.file}`);
         return;
       }

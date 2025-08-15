@@ -282,8 +282,8 @@ export class CalloutParser {
      * Generate a unique callout ID based on content and type
      */
     generateCalloutId(callout: CalloutItem): string {
-        // Create ID with type prefix for better organization
-        const typePrefix = callout.type.toLowerCase().substring(0, 3);
+        // Create ID with full type prefix for better organization
+        const typePrefix = callout.type.toLowerCase();
         const randomSuffix = Math.random().toString(36).substr(2, 6);
         return `${typePrefix}-${randomSuffix}`;
     }

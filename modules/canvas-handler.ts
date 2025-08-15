@@ -1,9 +1,8 @@
-import { App, TFile } from 'obsidian';
+import { App, TFile, TFolder } from 'obsidian';
 import { CalloutItem, CalloutOrganizerSettings } from './types';
 
-// This is a simplified version of the canvas handling functionality
-// The full implementation would need to be extracted from main.ts
-// This provides the basic structure for the refactoring
+// Complete canvas handling functionality extracted from main-original.ts
+// Handles canvas creation, relationship analysis, drag/drop operations, and link processing
 
 export class CanvasHandler {
     private app: App;
@@ -165,7 +164,7 @@ export class CanvasHandler {
             // Create base canvas data structure
             const mainNodeId = `node-${Date.now()}-main`;
             const mainNodeWidth = selectedCallout.canvasWidth || 400;
-            const mainNodeHeight = selectedCallout.canvasHeight || 180;
+            const mainNodeHeight = selectedCallout.canvasHeight || 200;
             
             const canvasData = {
                 nodes: [
@@ -184,137 +183,337 @@ export class CanvasHandler {
                 edges: []
             };
 
-            // Add related callouts and create connections
+            // Get all callouts for relationship analysis
             const allCallouts = await getAllCallouts();
-            const relatedCallouts = this.findRelatedCallouts(selectedCallout, allCallouts);
             
-            // Layout related callouts around the main callout
-            this.layoutRelatedCallouts(canvasData, mainNodeId, relatedCallouts, selectedCallout);
+            // Helper function to get callout key
+            const getCalloutKey = (callout: CalloutItem) => `${callout.file}:${callout.calloutID}`;
+            const mainCalloutKey = getCalloutKey(selectedCallout);
             
-            // Create or update canvas file
-            const existingCanvas = this.app.vault.getAbstractFileByPath(canvasPath);
-            if (existingCanvas instanceof TFile) {
-                await this.app.vault.modify(existingCanvas, JSON.stringify(canvasData, null, 2));
-            } else {
-                await this.app.vault.create(canvasPath, JSON.stringify(canvasData, null, 2));
+            // Create callout mapping
+            const calloutMap = new Map<string, CalloutItem>();
+            allCallouts.forEach(callout => {
+                if (callout.calloutID) {
+                    const key = `${callout.file}:${callout.calloutID}`;
+                    calloutMap.set(key, callout);
+                }
+            });
+            
+            // Analyze main node connections
+            const directInlinks: CalloutItem[] = [];
+            const directOutlinks: CalloutItem[] = [];
+            const bidirectionalLinks: CalloutItem[] = [];
+            
+            // Create global edge label map from ALL callouts
+            const globalEdgeLabels = new Map<string, string>();
+            allCallouts.forEach(callout => {
+                if (callout.outlinks) {
+                    callout.outlinks.forEach(([filename, calloutID, label]) => {
+                        if (label) {
+                            const fromKey = `${callout.file}:${callout.calloutID}`;
+                            const toKey = `${filename}:${calloutID}`;
+                            const edgeKey = `${fromKey}->${toKey}`;
+                            globalEdgeLabels.set(edgeKey, label);
+                        }
+                    });
+                }
+            });
+            
+            // Process main node's outlinks (right side nodes)
+            const outlinkLabels = new Map<string, string>();
+            if (selectedCallout.outlinks) {
+                selectedCallout.outlinks.forEach(([filename, calloutID, label]) => {
+                    const targetKey = `${filename}:${calloutID}`;
+                    
+                    // Store label if present
+                    if (label) {
+                        outlinkLabels.set(targetKey, label);
+                    }
+                    
+                    // Check if this is a self-connection
+                    const isSelfConnection = filename === selectedCallout.file && calloutID === selectedCallout.calloutID;
+                    
+                    if (!isSelfConnection) {
+                        const targetCallout = calloutMap.get(targetKey);
+                        if (targetCallout) {
+                            // Check if it's bidirectional
+                            const isTargetLinkingBack = targetCallout.outlinks?.some(([f, cId]) => 
+                                f === selectedCallout.file && cId === selectedCallout.calloutID
+                            );
+                            
+                            if (isTargetLinkingBack) {
+                                bidirectionalLinks.push(targetCallout);
+                            } else {
+                                directOutlinks.push(targetCallout);
+                            }
+                        }
+                    }
+                });
             }
             
-            // Open the canvas
-            const canvasFile = this.app.vault.getAbstractFileByPath(canvasPath);
-            if (canvasFile instanceof TFile) {
-                const leaf = this.app.workspace.getLeaf(false);
-                await leaf.openFile(canvasFile);
+            // Find callouts pointing to main node (left side nodes)
+            allCallouts.forEach(callout => {
+                if (callout.calloutID && callout.outlinks) {
+                    const hasLinkToMain = callout.outlinks.some(([filename, calloutID]) => 
+                        filename === selectedCallout.file && calloutID === selectedCallout.calloutID
+                    );
+                    
+                    if (hasLinkToMain) {
+                        const calloutKey = getCalloutKey(callout);
+                        const isSelfConnection = calloutKey === getCalloutKey(selectedCallout);
+                        
+                        if (!isSelfConnection) {
+                            // Check if already processed as bidirectional
+                            const alreadyProcessed = bidirectionalLinks.some(biCallout => 
+                                getCalloutKey(biCallout) === calloutKey
+                            );
+                            
+                            if (!alreadyProcessed) {
+                                directInlinks.push(callout);
+                            }
+                        }
+                    }
+                }
+            });
+            
+            // Advanced layout algorithm: left-right separation layout
+            const layoutData = new Map<string, {callout: CalloutItem, x: number, y: number, level: number, side: 'left' | 'right' | 'bidirectional'}>();
+            
+            // Layout parameters
+            const nodeSpacing = 280;
+            const levelSpacing = Math.max(600, mainNodeWidth + 200);
+            const bidirectionalSpacing = 150;
+            
+            // Left side layout: inlinks
+            directInlinks.forEach((callout, index) => {
+                const calloutKey = getCalloutKey(callout);
+                const totalInlinks = directInlinks.length;
+                const x = -levelSpacing;
+                const y = (index - (totalInlinks - 1) / 2) * nodeSpacing;
+                
+                layoutData.set(calloutKey, {
+                    callout,
+                    x,
+                    y,
+                    level: 1,
+                    side: 'left'
+                });
+            });
+            
+            // Right side layout: outlinks
+            directOutlinks.forEach((callout, index) => {
+                const calloutKey = getCalloutKey(callout);
+                const totalOutlinks = directOutlinks.length;
+                const x = levelSpacing;
+                const y = (index - (totalOutlinks - 1) / 2) * nodeSpacing;
+                
+                layoutData.set(calloutKey, {
+                    callout,
+                    x,
+                    y,
+                    level: 1,
+                    side: 'right'
+                });
+            });
+            
+            // Bidirectional connections layout: alternating top/bottom near center
+            bidirectionalLinks.forEach((callout, index) => {
+                const calloutKey = getCalloutKey(callout);
+                const totalBidirectional = bidirectionalLinks.length;
+                const x = 0; // Centered
+                const y = (index - (totalBidirectional - 1) / 2) * bidirectionalSpacing + 
+                         (index % 2 === 0 ? -250 : 250); // Alternating top/bottom
+                
+                layoutData.set(calloutKey, {
+                    callout,
+                    x,
+                    y,
+                    level: 1,
+                    side: 'bidirectional'
+                });
+            });
+            
+            // Add all nodes to canvas
+            let nodeIdCounter = 0;
+            layoutData.forEach(({callout, x, y, level}) => {
+                // Use saved dimensions if available, otherwise calculate based on level
+                const defaultWidth = Math.max(300, 400 - level * 25);
+                const defaultHeight = Math.max(120, 200 - level * 20);
+                
+                const nodeWidth = callout.canvasWidth || defaultWidth;
+                const nodeHeight = callout.canvasHeight || defaultHeight;
+                
+                // Generate temporary ID for each node
+                const nodeId = `node-${Date.now()}-${++nodeIdCounter}`;
+                
+                canvasData.nodes.push({
+                    id: nodeId,
+                    type: "file",
+                    file: callout.file,
+                    subpath: `#^${callout.calloutID}`,
+                    x: Math.round(x),
+                    y: Math.round(y),
+                    width: nodeWidth,
+                    height: nodeHeight,
+                    color: this.getCanvasColorForCallout(callout.type)
+                });
+            });
+            
+            // Create connection edges based on new paradigm
+            let edgeId = 0;
+            const nodeMap = new Map<string, any>(); // Map from "file:calloutID" to node
+            
+            // Create mapping for each node
+            canvasData.nodes.forEach((node: any) => {
+                if (node.type === "file" && node.file && node.subpath) {
+                    const fileMatch = node.subpath.match(/^#\^(.+)$/);
+                    if (fileMatch) {
+                        const calloutID = fileMatch[1];
+                        const key = `${node.file}:${calloutID}`;
+                        nodeMap.set(key, node);
+                    }
+                }
+            });
+            
+            const mainNodeKey = `${selectedCallout.file}:${selectedCallout.calloutID}`;
+            const mainNode = nodeMap.get(mainNodeKey);
+            
+            if (mainNode) {
+                // Create connections from left side nodes (inlinks) to main node
+                directInlinks.forEach(callout => {
+                    const calloutKey = getCalloutKey(callout);
+                    const fromNode = nodeMap.get(calloutKey);
+                    if (fromNode) {
+                        const edge: any = {
+                            id: `edge-${++edgeId}`,
+                            fromNode: fromNode.id,
+                            fromSide: "right",
+                            toNode: mainNode.id,
+                            toSide: "left"
+                        };
+                        
+                        // Check for global edge label
+                        const edgeKey = `${calloutKey}->${mainNodeKey}`;
+                        const label = globalEdgeLabels.get(edgeKey);
+                        if (label) {
+                            edge.label = label;
+                        }
+                        
+                        (canvasData.edges as any[]).push(edge);
+                    }
+                });
+                
+                // Create connections from main node to right side nodes (outlinks)
+                directOutlinks.forEach(callout => {
+                    const calloutKey = getCalloutKey(callout);
+                    const toNode = nodeMap.get(calloutKey);
+                    if (toNode) {
+                        const edge: any = {
+                            id: `edge-${++edgeId}`,
+                            fromNode: mainNode.id,
+                            fromSide: "right",
+                            toNode: toNode.id,
+                            toSide: "left"
+                        };
+                        
+                        // Add label if present (check global labels first, then local)
+                        const globalEdgeKey = `${mainNodeKey}->${calloutKey}`;
+                        const globalLabel = globalEdgeLabels.get(globalEdgeKey);
+                        const localLabel = outlinkLabels.get(calloutKey);
+                        const label = globalLabel || localLabel;
+                        if (label) {
+                            edge.label = label;
+                        }
+                        
+                        (canvasData.edges as any[]).push(edge);
+                    }
+                });
+                
+                // Create bidirectional connections (main node with top/bottom nodes)
+                bidirectionalLinks.forEach(callout => {
+                    const calloutKey = getCalloutKey(callout);
+                    const biNode = nodeMap.get(calloutKey);
+                    if (biNode) {
+                        // Main node to bidirectional node - right to right pattern
+                        const forwardEdge: any = {
+                            id: `edge-${++edgeId}`,
+                            fromNode: mainNode.id,
+                            fromSide: "right",
+                            toNode: biNode.id,
+                            toSide: "right"
+                        };
+                        
+                        // Add label for forward edge if present
+                        const globalForwardKey = `${mainNodeKey}->${calloutKey}`;
+                        const globalForwardLabel = globalEdgeLabels.get(globalForwardKey);
+                        const localForwardLabel = outlinkLabels.get(calloutKey);
+                        const forwardLabel = globalForwardLabel || localForwardLabel;
+                        if (forwardLabel) {
+                            forwardEdge.label = forwardLabel;
+                        }
+                        
+                        (canvasData.edges as any[]).push(forwardEdge);
+                        
+                        // Bidirectional node to main node - left to left pattern
+                        const reverseEdge: any = {
+                            id: `edge-${++edgeId}`,
+                            fromNode: biNode.id,
+                            fromSide: "left",
+                            toNode: mainNode.id,
+                            toSide: "left"
+                        };
+                        
+                        // Add label for reverse edge if present
+                        const globalReverseKey = `${calloutKey}->${mainNodeKey}`;
+                        const reverseLabel = globalEdgeLabels.get(globalReverseKey);
+                        if (reverseLabel) {
+                            reverseEdge.label = reverseLabel;
+                        }
+                        
+                        (canvasData.edges as any[]).push(reverseEdge);
+                    }
+                });
+            }
+
+            // Always regenerate canvas file to reflect latest connection relationships
+            try {
+                let canvasFile = this.app.vault.getAbstractFileByPath(canvasPath);
+                
+                if (canvasFile) {
+                    // File exists, delete old file
+                    await this.app.vault.delete(canvasFile);
+                }
+                
+                // Create new canvas file (using Obsidian standard format)
+                const canvasContent = JSON.stringify(canvasData, null, '\t');
+                canvasFile = await this.app.vault.create(canvasPath, canvasContent);
+                
+                if (canvasFile) {
+                    const leaf = this.app.workspace.getLeaf('tab');
+                    await leaf.openFile(canvasFile as any);
+                }
+            } catch (error: any) {
+                console.error('Error regenerating canvas:', error);
             }
             
         } catch (error) {
-            console.error('Error creating callout graph canvas:', error);
+            console.error('Error creating canvas:', error);
         }
     }
 
-    /**
-     * Find callouts related to the selected callout through outlinks
-     */
-    private findRelatedCallouts(selectedCallout: CalloutItem, allCallouts: CalloutItem[]): CalloutItem[] {
-        const related: CalloutItem[] = [];
-        const selectedKey = `${selectedCallout.file}:${selectedCallout.calloutID}`;
-        
-        // Create callout map for quick lookup
-        const calloutMap = new Map<string, CalloutItem>();
-        allCallouts.forEach(callout => {
-            if (callout.calloutID) {
-                const key = `${callout.file}:${callout.calloutID}`;
-                calloutMap.set(key, callout);
-            }
-        });
-        
-        // Find outlinks from selected callout
-        if (selectedCallout.outlinks) {
-            selectedCallout.outlinks.forEach(([filename, calloutID]) => {
-                const targetKey = `${filename}:${calloutID}`;
-                const targetCallout = calloutMap.get(targetKey);
-                if (targetCallout && targetKey !== selectedKey) {
-                    related.push(targetCallout);
-                }
-            });
-        }
-        
-        // Find inlinks to selected callout
-        allCallouts.forEach(callout => {
-            if (callout.calloutID && callout.outlinks) {
-                const hasLinkToSelected = callout.outlinks.some(([filename, calloutID]) => 
-                    filename === selectedCallout.file && calloutID === selectedCallout.calloutID
-                );
-                
-                if (hasLinkToSelected) {
-                    const calloutKey = `${callout.file}:${callout.calloutID}`;
-                    if (calloutKey !== selectedKey && !related.some(r => `${r.file}:${r.calloutID}` === calloutKey)) {
-                        related.push(callout);
-                    }
-                }
-            }
-        });
-        
-        return related;
-    }
-
-    /**
-     * Layout related callouts around the main callout in a circular pattern
-     */
-    private layoutRelatedCallouts(canvasData: any, mainNodeId: string, relatedCallouts: CalloutItem[], selectedCallout: CalloutItem): void {
-        const radius = 400;
-        const angleStep = relatedCallouts.length > 0 ? (2 * Math.PI) / relatedCallouts.length : 0;
-        
-        relatedCallouts.forEach((callout, index) => {
-            const angle = index * angleStep;
-            const x = Math.cos(angle) * radius;
-            const y = Math.sin(angle) * radius;
-            
-            const nodeId = `node-${Date.now()}-${index}`;
-            
-            // Add node
-            canvasData.nodes.push({
-                id: nodeId,
-                type: "file",
-                file: callout.file,
-                subpath: `#^${callout.calloutID}`,
-                x: x,
-                y: y,
-                width: callout.canvasWidth || 350,
-                height: callout.canvasHeight || 150,
-                color: this.getCanvasColorForCallout(callout.type)
-            });
-            
-            // Add edge
-            canvasData.edges.push({
-                id: `edge-${Date.now()}-${index}`,
-                fromNode: mainNodeId,
-                fromSide: "right",
-                toNode: nodeId,
-                toSide: "left"
-            });
-        });
-    }
 
     /**
      * Get canvas color for callout type
      */
     private getCanvasColorForCallout(calloutType: string): string {
-        // Color mapping for canvas nodes
-        const colorMap: Record<string, string> = {
-            'note': '#086ddd',
-            'info': '#086ddd',
-            'tip': '#00a86b',
-            'important': '#00a86b',
-            'success': '#00a86b',
-            'warning': '#ff9500',
-            'caution': '#ff9500',
-            'danger': '#e13238',
-            'error': '#e13238',
-            'example': '#7c3aed',
-            'quote': '#6b7280'
-        };
+        // Read callout color directly from user settings
+        const calloutColor = this.settings.calloutColors[calloutType]?.color;
+        if (!calloutColor) {
+            return "#086ddd"; // Default blue
+        }
         
-        return colorMap[calloutType.toLowerCase()] || '#6b7280';
+        // Return user configured hex color directly for canvas use
+        return calloutColor;
     }
 
     /**
